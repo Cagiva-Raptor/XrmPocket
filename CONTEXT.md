@@ -31,28 +31,36 @@ Bij context (gecheckt die dag, geen veronderstellingen):
 
 **Wat nu bestaat**
 
-- Map + `git` (aangemaakt 2026-10-30) + `.gitignore`
+- Map + `git` (aangemaakt 2026-10-30) + `.gitignore`; eerste commit gepusht naar
+  `Cagiva-Raptor/XrmPocket` (`main`)
+- **Richting beslist: web-based eerst** (zie `afspraken/decisions.yaml`
+  `2026-10-30-web-based-eerst-geen-native-start`) — overdrachtsdocument voor de
+  bouwsessie: **`START.md`** (lezen bij de start van elke sessie, samen met dit bestand)
 - **SSH deploy key** klaar: `~/.ssh/gh-xrmtoolbox-ios-deploy` (ed25519, geen
   passphrase, `chmod 600`) + host-alias `github.com-xrmpocket` in `~/.ssh/config`
   (deze key raakt enkel dit repo; de persoonlijke sleutel blijft buiten beeld).
   **Getest:** sleutelpaar ✔, authenticatie ✔ (`Hi Cagiva-Raptor/XrmPocket!`),
-  leestoegang via `git ls-remote` ✔. Remote-URL wordt straks:
+  leestoegang én push ✔. Remote-URL:
   `git@github.com-xrmpocket:Cagiva-Raptor/XrmPocket.git`
-- `afspraken/` in het project met `afspraken/decisions.yaml`
+- **Gecheckte feiten** (2026-10-30): `MarkMpn/Sql4Cds` (MIT) heeft een losse engine
+  (`MarkMpn.Sql4Cds.Engine` + `.Engine.Tests.NetCore` = cross-platform bewijs), los
+  van de XTB-UI; toolchains: Xcode 27.1 / Swift 6.4 ✔, Node v26 (Homebrew) ✔,
+  **.NET niet geïnstalleerd** (nodig voor de engine-spike)
+- `afspraken/` in het project met `afspraken/decisions.yaml` (4 beslissingen)
 - Sauron-geregistreerd: id `xrmpocket`, poort **4107**, sessie `Sauron - XrmPocket`
 
 **Wat nog open is**
 
-- **Stack/keuze**: geen enkel stack-bestand toegevoegd — dat is een aparte
-  beslissing (zie `afspraken/decisions.yaml`)
-- **Scope**: welke functionaliteit eerst (query's draaien? schema verkennen? alle
-  XrmToolBox-tools?) en voor wie (jij alleen, collega's, publiek in de App Store?)
-- **Platformkeuze**: native Swift/SwiftUI vs. cross-platform — volgt uit de scope,
-  niet omgekeerd
-- **Licentie van het eigen project**: kiezen vóór de eerste publicatie (GPL-3.0
-  als je XrmToolBox/andere GPL-code meeneemt, anders vrij te kiezen)
-- App Store-deelname vraagt een Apple Developer-account (staat of valt met die
-  keuze; TestFlight is jullie standaardkanaal voor eigen apps)
+- **Concrete stack** (backend-taal, frontend-aanpak): te kiezen in **fase 0** van
+  `START.md` — en dan als aparte beslissing noteren die
+  `2026-10-30-project-aangemaakt-met-conventies` vervangt; pas daarna stack-bestanden
+- **Blokkers op de gebruiker**: nieuw client secret + application user in SAV-TEST
+  (zie `START.md` §4; zonder die twee geen echte verbinding)
+- **Scope na SQL 4 CDS**: welke andere tools, en voor wie
+- **Licentie van het eigen project**: kiezen vóór de eerste publicatie (GPL-3.0 als je
+  GPL-code meeneemt, anders vrij te kiezen; MIT-code mag met naamsvermelding)
+- App Store-deelname vraagt een Apple Developer-account (TestFlight is jullie
+  standaardkanaal) — relevant pas als er ooit een native wrapper komt
 
 ## Sauron-koppeling
 
@@ -80,21 +88,24 @@ Afspraken:
 
 ## Werkwijze
 
-1. Elke sessie begint met **`CONTEXT.md`** + **`afspraken/decisions.yaml`**
+1. Elke sessie begint met **`START.md`** + **`CONTEXT.md`** + **`afspraken/decisions.yaml`**
 2. Nieuwe afspraak = toevoegen aan `decisions.yaml` **én** dit overzicht bijwerken
 3. Geen secrets (wachtwoorden, tokens, sleutels) in deze bestanden of in
-   commando's/logs — de deploy key blijft in `~/.ssh/`
+   commando's/logs — de deploy key blijft in `~/.ssh/`, het client secret in
+   `~/.config/opencode/secrets/`
 4. Kleine, Nederlandse commits
 5. Deel-rijke wijzigingen aan de gedeelde afspraken-repo: commit **én push**, andere
    machines pullen
 
 ## Open vragen
 
-1. **Welke functionaliteit eerst?** (bv. alleen query's zoals SQL 4 CDS, of bredere
-   toolbox zoals XrmToolBox zelf)
-2. **Voor wie** is de app: jijzelf, Savaco-collega's, of publiek in de App Store?
-3. Welke **platformkeuze** (native vs. cross-platform) volgt uit die scope?
+1. **Concrete stack** (backend-taal + frontend): keuze in fase 0 van `START.md`, daarna
+   als beslissing vastleggen
+2. **Welke functionaliteit eerst?** — zie `START.md`: SQL 4 CDS volledig goed
+   **vóór** de andere tools (doel van de gebruiker)
+3. **Voor wie** is de app: jijzelf, Savaco-collega's, of publiek (App Store/TestFlight)?
 4. Welke **license** krijgt het eigen project — en komt er GPL-code van XrmToolBox in?
 5. Is er behoefte aan **inlog op meerdere omgevingen** (dev/test/acc), en zo ja via
    welke authenticatie — rekening houdend met de CA-eis dat alleen
-   Intune-beheerde apparaten interactief mogen aanmelden?
+   Intune-beheerde apparaten interactief mogen aanmelden? (Web-based = app-only,
+   dus dit speelt hoogstens bij een latere native wrapper.)

@@ -64,3 +64,31 @@ notes:
     files:
       - CONTEXT.md
     status: active
+  - id: 2026-10-30-web-based-eerst-geen-native-start
+    date: 2026-10-30
+    title: "Richting: web-based (backend + web-UI/PWA); native Xcode komt later pas als wrapper"
+    decision: "De eerste versie is VOLLEDIG WEB-BASED: een backend die de Sql4Cds-
+      engine inprocess of als subprocess gebruikt, en een web-frontend (PWA-klaar) die
+      die backend aanspreekt. Er wordt GEEN native Xcode/SwiftUI-app gestart. Het
+      app-only client secret blijft uitsluitend server-side in
+      ~/.config/opencode/secrets/ (chmod 600), nooit in een app-binary en nooit in de
+      repo. Handhaving: geen Package.swift/Xcode-project vóór een latere beslissing die
+      deze vervangt; de backend spreekt uitsluitend dev/test/acc (standaard SAV-TEST)
+      en Productie enkel via de volledige URL; een eventuele native app is later een
+      wrapper rond DEZELFDE backend (tweede client), nooit een herschrijving van engine
+      of API. De concrete stack (backend-taal, frontend) wordt in fase 0 als aparte
+      beslissing genoteerd en vervangt dan
+      2026-10-30-project-aangemaakt-met-conventies — pas dán stack-bestanden maken."
+    rationale: "CA blokkeert interactieve login op onbeheerde apparaten (AADSTS530033,
+      bewezen op LXC én Mac Mini); een web-backend gebruikt app-only en omzeilt dat
+      volledig, terwijl een native client het secret zou moeten meeslepen (onveilig)
+      of op interactieve login zou stuklopen. Bovendien is de MIT-engine
+      (MarkMpn.Sql4Cds.Engine, met NetCore-tests) cross-platform bewezen en dus direct
+      bruikbaar in een web-backend, terwijl native een dure port zou vragen. De
+      gebruiker koos deze richting op 2026-10-30; het volledige overdrachtsdocument
+      voor de bouwsessie staat in START.md."
+    files:
+      - START.md
+      - afspraken/decisions.yaml
+      - CONTEXT.md
+    status: active
