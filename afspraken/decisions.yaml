@@ -1,0 +1,66 @@
+# Projectbeslissingen — XrmPocket (xrmpocket)
+#
+# Elke beslissing heeft: id, datum, titel, decision (de afspraak zelf, inclusief
+# "Handhaving:"-regel), rationale (waarom) en status. Voeg een nieuwe beslissing toe in
+# plaats van een bestaande stilletjes te overschrijven; wie een vorige beslissing
+# vervangt, laat het oude id staan met status "superseded" en geeft de vervanger een
+# nieuw id.
+#
+# Nooit secrets (wachtwoorden, tokens, sleutels) in dit bestand. De SSH-deploy key
+# blijft in ~/.ssh/ en komt hier niet in voor.
+
+version: 1
+notes:
+  - id: 2026-10-30-project-aangemaakt-met-conventies
+    date: 2026-10-30
+    title: "Project start als map met conventies; nog géén taal of framework kiezen"
+    decision: "Het project start als map met conventies: CONTEXT.md, git met een
+      .gitignore, een eigen afspraken/decisions.yaml en registratie in de Sauron-brug.
+      Er wordt nog géén taal/framework gekozen. Handhaving: geen package.json,
+      project.yml, pyproject.toml, Package.swift of vergelijkbare stack-bestanden
+      toevoegen zonder een nieuwe beslissing die deze vervangt. Merk op dat de
+      bestaande repo Cagiva-Raptor/XrmPocket voorlopig leeg blijft tot er een stack
+      ligt; de remote-URL gebruikt de host-alias github.com-xrmpocket zodat enkel de
+      deploy key (niet de persoonlijke sleutel) wordt aangeboden."
+    rationale: "Eerst het doel en de scope, dan de stack. Het doel (XrmToolBox
+      beschikbaar maken op iOS) staat in CONTEXT.md zoals de gebruiker het meegaf; de
+      scope en platformkeuze zijn nog niet bepaald, dus nu al een stack kiezen zou die
+      keuze stiekem vastleggen."
+    files:
+      - CONTEXT.md
+      - afspraken/decisions.yaml
+    status: active
+  - id: 2026-10-30-zichtbaar-in-sauron-app
+    date: 2026-10-30
+    title: "Het project is opgenomen in bridge/projects.json met id 'xrmpocket' en poort 4107"
+    decision: "Het project is geregistreerd in bridge/projects.json met id 'xrmpocket',
+      name 'XrmPocket', path /Users/jurgendictus/opencode/xrmpocket en port 4107. De
+      sessietitel is 'Sauron - XrmPocket'. Handhaving: volgende vrije poort (4101-4106
+      zijn bezet; nooit een bestaande poort hergebruiken of wijzigen), de brug
+      herstarten na elke wijziging aan projects.json, nooit twee sessies met dezelfde
+      titel, en beide kopieën gelijk houden (live ~/Projects/Sauron/bridge en
+      git-repo ~/opencode/Sauron/bridge)."
+    rationale: "Een bestaande map is zonder een regel in projects.json niet zichtbaar
+      in de Sauron-app; dat leerden we bij het Savaco-project. De vorige vrije poort
+      (4106) is sindsdien door Savaco ingenomen, dus 4107 is de volgende."
+    files:
+      - CONTEXT.md
+    status: active
+  - id: 2026-10-30-naam-en-merkkader
+    date: 2026-10-30
+    title: "Merknaam XrmPocket; 'XrmToolBox' niet als app-naam gebruiken"
+    decision: "De app heet XrmPocket (gebruikerskeuze 2026-10-30; vrij zowel in de
+      App Store als op GitHub). De naam 'XrmToolBox' en de code van MscrmTools worden
+      NIET als app-naam of officiële branding gebruikt, tenzij er ooit een expliciete
+      samenwerking met Tanguy Touré/MscrmTools komt. Handhaving: in README, App
+      Store-listing en UI alleen 'geinspireerd door XrmToolBox' of gelijkaardige
+      naamsvermelding; geen 'XrmToolBox for iOS'. Bij hergebruik van GPL-3.0-code
+      (XrmToolBox zelf) wordt het eigen project GPL-3.0; MIT-code (o.a. MarkMpn/Sql4CDS)
+      mag vrij hergebruikt worden met naamsvermelding."
+    rationale: "XrmToolBox is het merk van een ander en de iOS-app wordt een nieuw
+      werk (WinForms draait niet op iOS), geen port. Een naam die de indruk wekt van
+      een officieel product zou zowel merk als gebruikers misleiden. De licence-regel
+      voorkomt dat er ongemerkt copyleft-verplichtingen het project in sluipt."
+    files:
+      - CONTEXT.md
+    status: active
