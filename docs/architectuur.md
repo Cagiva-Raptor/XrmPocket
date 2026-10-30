@@ -85,6 +85,15 @@ maakt. Ondersteund: attributen, filters (ook genest), JOINs (`link-entity`), sor
 `TOP`, `GROUP BY` met `COUNT/SUM/AVG/MIN/MAX`. Wat niet kan, geeft een expliciete
 foutmelding in plaats van een stil verkeerd resultaat.
 
+## Op de iPhone
+
+1. Zorg dat de Mac bereikbaar is (lokaal netwerk of Tailscale): `http://192.168.9.9:4108`.
+2. Open die URL in Safari — de app werkt meteen; alle query's lopen via de backend.
+3. **Installeren als PWA** (icoon op het beginscherm) vereist **HTTPS**: iOS weigert
+   een service worker op een gewone `http://`-LAN-url. Oplossing zodra we zover zijn:
+   Tailscale + `tailscale serve`/Caddy met een certificaat vóór poort 4108. Dat is een
+   aparte stap, geen wijziging aan de app zelf.
+
 ## Teststrategie
 
 - Geen echte klantgegevens als testmateriaal: de mock is volledig synthetisch.
