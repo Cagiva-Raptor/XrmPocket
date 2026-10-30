@@ -29,7 +29,8 @@ notes:
     files:
       - CONTEXT.md
       - afspraken/decisions.yaml
-    status: active
+    status: superseded
+    superseded_by: 2026-10-30-stack-aspnetcore-react
   - id: 2026-10-30-zichtbaar-in-sauron-app
     date: 2026-10-30
     title: "Het project is opgenomen in bridge/projects.json met id 'xrmpocket' en poort 4107"
@@ -91,4 +92,51 @@ notes:
       - START.md
       - afspraken/decisions.yaml
       - CONTEXT.md
+    status: active
+  - id: 2026-10-30-stack-aspnetcore-react
+    date: 2026-10-30
+    title: "Stack: ASP.NET Core (C#, engine inprocess) + React/TypeScript/Vite, PWA-klaar"
+    decision: "De backend is ASP.NET Core op .NET 10 in C# en gebruikt
+      MarkMpn.Sql4Cds.Engine als NuGet-library inprocess (geen subprocess, geen
+      Node-vertaalslag). De frontend is React + TypeScript, gebouwd met Vite, en
+      PWA-klaar (manifest + service worker) zodat de app op de iPhone te installeren
+      is. Repostructuur: backend/XrmPocket.Api (API + engine), web/ (frontend),
+      docs/ (spikes en architectuur). Handhaving: de backend-taal blijft C# zolang de
+      engine in C# is; het client secret blijft server-side in
+      ~/.config/opencode/secrets/ en komt nooit in web/, nooit in een build-artefact
+      en nooit in de repo; de frontend praat uitsluitend met de eigen API en nooit
+      rechtstreeks met Dataverse. Deze beslissing vervangt
+      2026-10-30-project-aangemaakt-met-conventies. Op 2026-10-30 is de keuzevraag
+      aan de gebruiker voorgelegd en overgeslagen; de aanbevolen optie is aangehouden
+      en blijft aanpasbaar zolang er geen UI-afhankelijkheden zijn."
+    rationale: "De engine (MIT) is C# en levert SQL naar FetchXML plus uitvoering;
+      dezelfde taal houdt dat inprocess en vermijdt een IPC-laag met eigen
+      foutpaden. Een bewezen spike op 2026-10-30 (docs/spike-2026-10-30-sql-naar-fetchxml.md)
+      toont SQL naar FetchXML en uitvoering via een zelfgemaakte mock-connector zonder
+      XrmToolBox en zonder Dataverse-verbinding. React geeft ruimte voor de latere
+      XrmToolBox-achtige uitbreidingen (meerdere tools, panels, grids) zonder de
+      UI-state met de hand te beheren."
+    files:
+      - backend/XrmPocket.Api/XrmPocket.Api.csproj
+      - web/package.json
+      - docs/spike-2026-10-30-sql-naar-fetchxml.md
+      - CONTEXT.md
+    status: active
+  - id: 2026-10-31-app-poort-4108
+    date: 2026-10-31
+    title: "XrmPocket-app draait op poort 4108; Sauron-poorten blijven ongemoeid"
+    decision: "De XrmPocket-API en de gebouwde PWA draaien op poort 4108 (0.0.0.0 in
+      appsettings.json); de Vite-devserver gebruikt 5173 met een proxy naar 4108.
+      Poort 4107 blijft van de Sauron/openCode-sessie van dit project en wordt niet
+      door de app gebruikt. Handhaving: geen bestaande poort (4101-4107) hergebruiken
+      of wijzigen; een nieuwe poort wordt eerst in de Sauron-brug vrij gehouden en pas
+      daarna in de app gezet."
+    rationale: "Bij de eerste start bleek poort 4107 al bezet door de door Sauron
+      gestarte openCode-sessie van dit project (127.0.0.1), waardoor verzoeken aan
+      localhost bij die sessie uitkwamen in plaats van bij de app. De app heeft een
+      eigen poort nodig; 4108 is de volgende vrije."
+    files:
+      - backend/XrmPocket.Api/appsettings.json
+      - web/vite.config.ts
+      - docs/architectuur.md
     status: active

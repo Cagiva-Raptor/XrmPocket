@@ -1,6 +1,6 @@
 # START — overdracht voor de XrmPocket-sessie
 
-Laatst bijgewerkt: 2026-10-30. **Lees vóór je iets doet:** `CONTEXT.md` +
+Laatst bijgewerkt: 2026-10-31 (fase 0 klaar en fase 2/3 in opbouw — zie §5). **Lees vóór je iets doet:** `CONTEXT.md` +
 `afspraken/decisions.yaml` (zelfde map). Daarna kun je direct aan de slag.
 
 ## 1. Het doel (letterlijk, gebruiker 2026-10-30)
@@ -44,6 +44,11 @@ wrapper rond dezelfde backend** — dat is geen herschrijving, enkel een tweede
 client. Beslis dat niet nu.
 
 ## 3. Wat er al klaarligt (niet opnieuw doen)
+
+> **2026-10-31:** fase 0 is af. Stack = ASP.NET Core + React/TS/Vite
+> (`2026-10-30-stack-aspnetcore-react`), app op poort **4108**
+> (`2026-10-31-app-poort-4108`). De engine draait inprocess; `backend/` + `web/` +
+> `docs/` bestaan en de mock-keten werkt end-to-end. Zie `README.md` om te starten.
 
 - **Repo**: `Cagiva-Raptor/XrmPocket`, remote
   `git@github.com-xrmpocket:Cagiva-Raptor/XrmPocket.git` (host-alias → **enkel** de
@@ -96,10 +101,10 @@ client. Beslis dat niet nu.
 
 | Fase | Inhoud | Klaar als… |
 |---|---|---|
-| **0 — Fundament** | stack-beslissing + engine-spike + repostructuur | engine vertaalt een SELECT lokaal |
-| **1 — Verbinding** | secret + application user + `whoami check` groen | backend raadt SAV-TEST aan |
-| **2 — Kern** | SQL → engine → Web API → resultaten (API-laag) | één query levert een grid op via API |
-| **3 — UI** | editor, grid, omgevingskiezer, foutkaart, PWA | je draait een echte query vanaf je telefoon |
+| **0 — Fundament** ✔ | stack-beslissing + engine-spike + repostructuur | engine vertaalt een SELECT lokaal — **klaar 2026-10-31** (`docs/spike-2026-10-30-sql-naar-fetchxml.md`) |
+| **1 — Verbinding** ⛔ | secret + application user + `whoami check` groen | backend raadt SAV-TEST aan — **wacht op de gebruiker** (secret-file is nu 4 bytes) |
+| **2 — Kern** 🚧 | SQL → engine → Web API → resultaten (API-laag) | één query levert een grid op via API — **werkt tegen de mock**; echte omgeving wacht op fase 1 |
+| **3 — UI** 🚧 | editor, grid, omgevingskiezer, foutkaart, PWA | je draait een echte query vanaf je telefoon — **UI staat** (poort 4108), nog niet op de iPhone getest |
 | **4 — Uitbreiding** | andere XrmToolBox-tools (pas ná fase 3) | volgorde ervan kiest de gebruiker |
 
 Pas in fase 4 praten we over meer tools — daarvoor **volledig goed** werkende fase 2-3.
