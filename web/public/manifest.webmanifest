@@ -1,0 +1,20 @@
+{
+  "name": "XrmPocket — SQL 4 CDS",
+  "short_name": "XrmPocket",
+  "description": "SQL 4 CDS voor Dataverse, in de browser en op je telefoon.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f6f6f3",
+  "theme_color": "#0b6b5f",
+  "lang": "nl",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
