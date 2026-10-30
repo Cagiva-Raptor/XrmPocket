@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>XrmPocket.Api</RootNamespace>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- SQL 4 CDS-engine (MIT, Mark Carrington): SQL naar FetchXML + uitvoering, inprocess. -->
+    <PackageReference Include="MarkMpn.Sql4Cds.Engine" Version="10.5.1" />
+  </ItemGroup>
+
+</Project>
