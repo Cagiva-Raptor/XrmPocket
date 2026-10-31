@@ -1,15 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  fetchEnvironments,
+  fetchEnvironmentTemplates,
   formatCell,
+  listConnections,
   runQuery,
-  type EnvironmentInfo,
+  testConnection,
+  type ConnectionTestResult,
+  type EnvironmentTemplate,
   type QueryResponse,
+  type SavedConnection,
 } from './api'
+import { ConnectionManager } from './ConnectionManager'
 import './App.css'
 
 const SQL_STORAGE_KEY = 'xrmpocket.sql'
-const ENV_STORAGE_KEY = 'xrmpocket.environment'
+const CONNECTION_STORAGE_KEY = 'xrmpocket.connection'
 
 const EXAMPLES: { label: string; sql: string }[] = [
   {
@@ -31,43 +36,56 @@ const EXAMPLES: { label: string; sql: string }[] = [
 ]
 
 function App() {
-  const [environments, setEnvironments] = useState<EnvironmentInfo[]>([])
-  const [environment, setEnvironment] = useState(() => localStorage.getItem(ENV_STORAGE_KEY) ?? 'mock')
-  const [sql, setSql] = useState(
-    () => localStorage.getItem(SQL_STORAGE_KEY) ?? EXAMPLES[0].sql,
-  )
+  const [connections, setConnections] = useState<SavedConnection[]>([])
+  const [templates, setTemplates] = useState<EnvironmentTemplate[]>([])
+  const [connectionId, setConnectionId] = useState(() => localStorage.getItem(CONNECTION_STORAGE_KEY) ?? '')
+  const [managerOpen, setManagerOpen] = useState(false)
+  const [test, setTest] = useState<ConnectionTestResult | null>(null)
+  const [sql, setSql] = useState(() => localStorage.getItem(SQL_STORAGE_KEY) ?? EXAMPLES[0].sql)
   const [maxRows, setMaxRows] = useState(200)
   const [response, setResponse] = useState<QueryResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [fatal, setFatal] = useState<string | null>(null)
   const editorRef = useRef<HTMLTextAreaElement>(null)
 
-  useEffect(() => {
-    fetchEnvironments()
-      .then((list) => {
-        setEnvironments(list)
-        const stored = localStorage.getItem(ENV_STORAGE_KEY)
-        const current = list.find((env) => env.id === (stored ?? environment))
+  const reload = useCallback(async () => {
+    try {
+      const [list, environmentTemplates] = await Promise.all([listConnections(), fetchEnvironmentTemplates()])
+      setConnections(list.connections)
+      setTemplates(environmentTemplates)
 
-        if (!current || !current.configured) {
-          const fallback = list.find((env) => env.configured)
-          if (fallback) setEnvironment(fallback.id)
-        }
-      })
-      .catch((error: unknown) => setFatal(String(error)))
+      const stored = localStorage.getItem(CONNECTION_STORAGE_KEY)
+      const known = list.connections.find((connection) => connection.id === stored)
+
+      if (!known) {
+        const fallback =
+          list.connections.find((connection) => connection.id === list.defaultConnectionId) ??
+          list.connections.find((connection) => connection.configured) ??
+          list.connections[0]
+
+        if (fallback) setConnectionId(fallback.id)
+      }
+    } catch (error) {
+      setFatal(error instanceof Error ? error.message : String(error))
+    }
   }, [])
+
+  useEffect(() => {
+    void reload()
+  }, [reload])
 
   useEffect(() => {
     localStorage.setItem(SQL_STORAGE_KEY, sql)
   }, [sql])
 
   useEffect(() => {
-    localStorage.setItem(ENV_STORAGE_KEY, environment)
-  }, [environment])
+    if (connectionId) localStorage.setItem(CONNECTION_STORAGE_KEY, connectionId)
+    setTest(null)
+  }, [connectionId])
 
-  const activeEnvironment = useMemo(
-    () => environments.find((env) => env.id === environment),
-    [environments, environment],
+  const connection = useMemo(
+    () => connections.find((item) => item.id === connectionId),
+    [connections, connectionId],
   )
 
   async function handleRun() {
@@ -77,7 +95,21 @@ function App() {
     setFatal(null)
 
     try {
-      setResponse(await runQuery(sql, environment, maxRows))
+      setResponse(await runQuery(sql, connectionId || null, maxRows))
+    } catch (error) {
+      setFatal(error instanceof Error ? error.message : String(error))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleTest() {
+    if (!connection) return
+
+    setLoading(true)
+
+    try {
+      setTest(await testConnection(connection.id))
     } catch (error) {
       setFatal(error instanceof Error ? error.message : String(error))
     } finally {
@@ -97,8 +129,7 @@ function App() {
       const target = event.currentTarget
       const start = target.selectionStart
       const end = target.selectionEnd
-      const next = `${sql.slice(0, start)}  ${sql.slice(end)}`
-      setSql(next)
+      setSql(`${sql.slice(0, start)}  ${sql.slice(end)}`)
       requestAnimationFrame(() => {
         target.selectionStart = target.selectionEnd = start + 2
       })
@@ -120,16 +151,16 @@ function App() {
 
         <div className="toolbar">
           <label className="field">
-            <span>Omgeving</span>
+            <span>Verbinding</span>
             <select
-              value={environment}
-              onChange={(event) => setEnvironment(event.target.value)}
+              value={connectionId}
+              onChange={(event) => setConnectionId(event.target.value)}
               disabled={loading}
             >
-              {environments.map((env) => (
-                <option key={env.id} value={env.id} disabled={!env.configured}>
-                  {env.label}
-                  {env.configured ? '' : ' (niet geconfigureerd)'}
+              {connections.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                  {item.configured ? '' : ' (nog niet bruikbaar)'}
                 </option>
               ))}
             </select>
@@ -137,11 +168,7 @@ function App() {
 
           <label className="field">
             <span>Max. rijen</span>
-            <select
-              value={maxRows}
-              onChange={(event) => setMaxRows(Number(event.target.value))}
-              disabled={loading}
-            >
+            <select value={maxRows} onChange={(event) => setMaxRows(Number(event.target.value))} disabled={loading}>
               {[50, 200, 500, 1000].map((value) => (
                 <option key={value} value={value}>
                   {value}
@@ -150,6 +177,10 @@ function App() {
             </select>
           </label>
 
+          <button className="ghost" onClick={() => setManagerOpen(true)} disabled={loading}>
+            Verbindingen…
+          </button>
+
           <button className="run" onClick={() => void handleRun()} disabled={loading}>
             {loading ? 'Bezig…' : 'Uitvoeren'}
             <kbd>⌘↵</kbd>
@@ -157,11 +188,27 @@ function App() {
         </div>
       </header>
 
-      {activeEnvironment && !activeEnvironment.configured && (
-        <p className="notice">
-          {activeEnvironment.label} is nog niet bruikbaar: {activeEnvironment.note}. Gebruik
-          voorlopig de mock-omgeving.
-        </p>
+      {connection && (
+        <div className="statusbar">
+          <span className={`badge badge-${connection.highlight}`}>{connection.environment}</span>
+          <strong>{connection.name}</strong>
+          <span className="meta">{connection.kind === 'mock' ? 'synthetische data' : connection.url}</span>
+
+          <button className="ghost small" onClick={() => void handleTest()} disabled={loading}>
+            Testen
+          </button>
+
+          {test && (
+            <span className={test.ok ? 'test-ok' : 'test-error'}>
+              {test.ok
+                ? `✔ ${test.organizationName ?? 'verbonden'}${test.organizationVersion ? ` (${test.organizationVersion})` : ''}`
+                : `✘ ${test.errorCode}: ${test.message}`}
+              {test.hint && <span className="hint"> {test.hint}</span>}
+            </span>
+          )}
+
+          {!connection.configured && !test && connection.note && <span className="hint">{connection.note}</span>}
+        </div>
       )}
 
       {fatal && <p className="notice error">{fatal}</p>}
@@ -208,8 +255,8 @@ function App() {
           {response && (
             <p className="meta">
               {response.rowCount} {response.rowCount === 1 ? 'rij' : 'rijen'}
-              {response.truncated ? ' (afgekapt op de limiet)' : ''} ·{' '}
-              {response.durationMs.toFixed(0)} ms · omgeving {response.environment}
+              {response.truncated ? ' (afgekapt op de limiet)' : ''} · {response.durationMs.toFixed(0)} ms ·{' '}
+              {response.connectionName}
             </p>
           )}
         </div>
@@ -244,11 +291,7 @@ function App() {
                       <td
                         key={cellIndex}
                         className={
-                          cell === null
-                            ? 'cell-null'
-                            : typeof cell === 'number'
-                              ? 'cell-number'
-                              : undefined
+                          cell === null ? 'cell-null' : typeof cell === 'number' ? 'cell-number' : undefined
                         }
                       >
                         {formatCell(cell)}
@@ -261,9 +304,7 @@ function App() {
           </div>
         )}
 
-        {response?.ok && response.rows.length === 0 && (
-          <p className="empty">De query gaf geen rijen terug.</p>
-        )}
+        {response?.ok && response.rows.length === 0 && <p className="empty">De query gaf geen rijen terug.</p>}
 
         {response && response.fetchXml.length > 0 && (
           <details className="fetchxml">
@@ -274,6 +315,14 @@ function App() {
           </details>
         )}
       </section>
+
+      <ConnectionManager
+        open={managerOpen}
+        connections={connections}
+        templates={templates}
+        onClose={() => setManagerOpen(false)}
+        onChanged={() => void reload()}
+      />
     </div>
   )
 }

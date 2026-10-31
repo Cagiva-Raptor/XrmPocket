@@ -3,14 +3,64 @@
  * alle verbindingen en secrets blijven in de backend.
  */
 
-export interface EnvironmentInfo {
+export type ConnectionKind = 'mock' | 'dataverse'
+export type Highlight = 'none' | 'dev' | 'test' | 'acc' | 'production'
+
+/** Eén opgeslagen verbinding (het equivalent van een ConnectionDetail in XrmToolBox). */
+export interface SavedConnection {
+  id: string
+  name: string
+  kind: ConnectionKind
+  authType: string
+  environment: string
+  url: string | null
+  tenantId: string | null
+  clientId: string | null
+  highlight: Highlight
+  timeoutSeconds: number
+  isDefault: boolean
+  configured: boolean
+  secretPresent: boolean
+  note: string | null
+  lastUsedOn: string | null
+}
+
+export interface ConnectionList {
+  defaultConnectionId: string | null
+  connections: SavedConnection[]
+}
+
+export interface ConnectionTestResult {
+  ok: boolean
+  organizationName: string | null
+  organizationUniqueName: string | null
+  organizationVersion: string | null
+  userId: string | null
+  errorCode: string | null
+  message: string | null
+  hint: string | null
+}
+
+/** Sjabloon om snel een verbinding te maken (dev/test/acc/productie). */
+export interface EnvironmentTemplate {
   id: string
   label: string
-  kind: 'mock' | 'dataverse'
   url: string | null
   production: boolean
-  configured: boolean
-  note: string | null
+}
+
+export interface ConnectionInput {
+  id?: string
+  name: string
+  kind: ConnectionKind
+  authType: string
+  environment: string
+  url: string | null
+  tenantId: string | null
+  clientId: string | null
+  secretFile?: string | null
+  timeoutSeconds: number
+  highlight: Highlight
 }
 
 export interface ResultColumn {
@@ -28,7 +78,8 @@ export interface QueryError {
 
 export interface QueryResponse {
   ok: boolean
-  environment: string | null
+  connectionId: string | null
+  connectionName: string | null
   columns: ResultColumn[]
   rows: CellValue[][]
   rowCount: number
@@ -38,29 +89,68 @@ export interface QueryResponse {
   error: QueryError | null
 }
 
-export async function fetchEnvironments(): Promise<EnvironmentInfo[]> {
-  const response = await fetch('/api/environments')
+async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init)
 
   if (!response.ok) {
-    throw new Error(`Omgevingen ophalen mislukt (${response.status})`)
+    let message = `${response.status} ${response.statusText}`
+
+    try {
+      const body = (await response.json()) as { error?: string }
+      if (body.error) message = body.error
+    } catch {
+      // geen JSON-body: statusmelding volstaat
+    }
+
+    throw new Error(message)
   }
 
-  const data = (await response.json()) as { environments: EnvironmentInfo[] }
-  return data.environments
+  return (await response.json()) as T
 }
 
-export async function runQuery(sql: string, environment: string, maxRows: number): Promise<QueryResponse> {
-  const response = await fetch('/api/query', {
+export function listConnections(): Promise<ConnectionList> {
+  return request<ConnectionList>('/api/connections')
+}
+
+export function fetchEnvironmentTemplates(): Promise<EnvironmentTemplate[]> {
+  return request<{ environments: EnvironmentTemplate[] }>('/api/environments').then((data) => data.environments)
+}
+
+export function saveConnection(input: ConnectionInput): Promise<SavedConnection> {
+  return request<SavedConnection>('/api/connections', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ sql, environment, maxRows }),
+    body: JSON.stringify(input),
   })
+}
 
-  if (!response.ok) {
-    throw new Error(`Query mislukt (${response.status})`)
-  }
+export function deleteConnection(id: string): Promise<{ deleted: string }> {
+  return request<{ deleted: string }>(`/api/connections/${id}`, { method: 'DELETE' })
+}
 
-  return (await response.json()) as QueryResponse
+export function setDefaultConnection(id: string): Promise<SavedConnection> {
+  return request<SavedConnection>(`/api/connections/${id}/default`, { method: 'POST' })
+}
+
+export function testConnection(id: string): Promise<ConnectionTestResult> {
+  return request<ConnectionTestResult>(`/api/connections/${id}/test`, { method: 'POST' })
+}
+
+/** Bewaart het client secret server-side (chmod 600); de waarde komt nooit terug. */
+export function saveSecret(id: string, secret: string): Promise<{ ok: boolean; message: string }> {
+  return request<{ ok: boolean; message: string }>(`/api/connections/${id}/secret`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ secret }),
+  })
+}
+
+export function runQuery(sql: string, connectionId: string | null, maxRows: number): Promise<QueryResponse> {
+  return request<QueryResponse>('/api/query', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sql, connectionId, maxRows }),
+  })
 }
 
 /** Weergave van één cel: null blijft zichtbaar als NULL, objecten als JSON. */

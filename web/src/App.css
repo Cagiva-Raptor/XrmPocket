@@ -347,3 +347,221 @@ td.cell-null {
     max-height: 60vh;
   }
 }
+
+/* Statusbalk (verbinding) */
+
+.statusbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 14px;
+}
+
+.badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  background: #ecece7;
+  color: #4b5563;
+}
+
+.badge-test {
+  background: #e6f0ff;
+  color: #1d4ed8;
+}
+
+.badge-acc {
+  background: #fff4e0;
+  color: #a16207;
+}
+
+.badge-dev {
+  background: #eaf7ee;
+  color: #166534;
+}
+
+.badge-production {
+  background: #fde8e8;
+  color: #b91c1c;
+}
+
+.badge-mock {
+  background: #eef2ff;
+  color: #4338ca;
+}
+
+.default-mark {
+  color: #d97706;
+  margin-left: 6px;
+}
+
+.test-ok {
+  color: #166534;
+  font-size: 13px;
+  margin: 4px 0 0;
+}
+
+.test-error {
+  color: #b91c1c;
+  font-size: 13px;
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}
+
+/* Knoppen */
+
+.ghost {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.ghost:hover:not(:disabled) {
+  background: #f6f6f2;
+}
+
+.ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ghost.small {
+  padding: 5px 10px;
+  font-size: 13px;
+}
+
+.ghost.danger {
+  color: #b91c1c;
+  border-color: #f3cbc6;
+}
+
+/* Invoervelden */
+
+.field input {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 8px 10px;
+  font-size: 14px;
+  min-width: 150px;
+}
+
+.field input:focus-visible,
+.field select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Modal: verbindingen beheren */
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(16, 18, 22, 0.45);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  z-index: 10;
+}
+
+.modal {
+  background: var(--panel);
+  border-radius: 16px;
+  width: min(880px, 100%);
+  max-height: 90dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-head h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.modal-body {
+  overflow: auto;
+  padding: 14px 18px 20px;
+  display: grid;
+  gap: 18px;
+}
+
+.connection-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.connection-list li {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.connection-list li.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.connection-main {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.connection-main p {
+  margin: 3px 0 0;
+  word-break: break-word;
+}
+
+.connection-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.connection-form h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.form-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+}
