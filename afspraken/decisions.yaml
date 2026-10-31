@@ -67,6 +67,7 @@ notes:
     status: active
   - id: 2026-10-30-web-based-eerst-geen-native-start
     date: 2026-10-30
+    amended_by: 2026-11-01-interactieve-login-als-tweede-authvorm
     title: "Richting: web-based (backend + web-UI/PWA); native Xcode komt later pas als wrapper"
     decision: "De eerste versie is VOLLEDIG WEB-BASED: een backend die de Sql4Cds-
       engine inprocess of als subprocess gebruikt, en een web-frontend (PWA-klaar) die
@@ -142,6 +143,7 @@ notes:
     status: active
   - id: 2026-10-31-verbindingen-zoals-xrmtoolbox
     date: 2026-10-31
+    amended_by: 2026-11-01-interactieve-login-als-tweede-authvorm
     title: "Verbindingen zoals XrmToolBox (lijst + standaard + test), maar secrets buiten het profiel"
     decision: "Verbindingen volgen het model van XrmToolBox: een lijst met opgeslagen
       verbindingen (ConnectionProfile met id, naam, soort, authType, omgeving, URL,
@@ -173,6 +175,39 @@ notes:
       - backend/XrmPocket.Api/Connections/ConnectionProfile.cs
       - backend/XrmPocket.Api/Connections/ConnectionStore.cs
       - backend/XrmPocket.Api/Connections/ConnectionFactory.cs
+      - web/src/ConnectionManager.tsx
+      - docs/verbindingen.md
+      - CONTEXT.md
+    status: active
+  - id: 2026-11-01-interactieve-login-als-tweede-authvorm
+    date: 2026-11-01
+    title: "Interactief aanmelden met het eigen Microsoft-account naast app-only"
+    decision: "Een verbinding mag naast app-only ook interactief zijn: OAuth
+      authorization code met PKCE, uitgevoerd in de browser van de gebruiker, met als
+      resultaat een refresh token in ~/.config/xrmpocket/tokens/ (chmod 600, buiten de
+      repo) en access tokens via de token-provider van de ServiceClient. Query's lopen
+      dan als de aangemelde gebruiker. De callback-URL moet exact overeenkomen met een
+      redirect-URI in de app registration; de backend aanvaardt enkel origins uit
+      XrmPocket:InteractiveAllowedOrigins (geen open redirect). Deze beslissing
+      vervangt de zinsnede 'alleen app-only' in
+      2026-10-31-verbindingen-zoals-xrmtoolbox en in
+      2026-10-30-web-based-eerst-geen-native-start. Handhaving: tokens en secrets
+      nooit in de repo, in de UI of in logs; interactief alleen via HTTPS of localhost
+      (Microsoft-regel); bij AADSTS530033 geen omweg zoeken maar melden dat het
+      apparaat niet compliant is; de app-only route blijft bestaan voor automatisering."
+    rationale: "De gebruiker wil zich aanmelden met zijn eigen account, zoals in
+      XrmToolBox, en niet enkel met een AppId werken. De eerdere conclusie dat
+      interactief onmogelijk is, kwam van device-code-flow op de server: die kan geen
+      apparaatcompliance bewijzen en faalt dus altijd onder het CA-beleid
+      (AADSTS530033). In deze opzet meldt de gebruiker zich aan in zijn eigen browser,
+      waar compliance wél bewezen kan worden; bovendien zijn rechten en rollen dan die
+      van de gebruiker in plaats van die van één applicatiegebruiker. De prijs is een
+      extra portal-configuratie (redirect-URI + gedelegeerde Dataverse-toestemming) en
+      HTTPS buiten localhost."
+    files:
+      - backend/XrmPocket.Api/Connections/InteractiveAuthService.cs
+      - backend/XrmPocket.Api/Connections/ConnectionFactory.cs
+      - backend/XrmPocket.Api/Configuration/XrmPocketOptions.cs
       - web/src/ConnectionManager.tsx
       - docs/verbindingen.md
       - CONTEXT.md
