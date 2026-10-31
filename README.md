@@ -13,9 +13,12 @@ Carrington, die **inprocess** in de backend draait. Naamsvermelding:
 - **Fase 0 klaar**: stack gekozen, engine-spike geslaagd
   ([verslag](docs/spike-2026-10-30-sql-naar-fetchxml.md)), repo-structuur staat.
 - **Fase 2/3 in opbouw**: SQL → FetchXML → resultaatgrid werkt volledig tegen een
-  **synthetische mock-omgeving**. De Dataverse-route (app-only) is geïmplementeerd maar
-  nog niet getest: er ontbreekt een geldig client secret en een application user in
-  SAV-TEST (zie [`START.md`](START.md) §4).
+  **synthetische mock-omgeving**, met een **verbindingsbeheer zoals XrmToolBox**
+  (lijst, standaardverbinding, test, eigen secret per verbinding) — zie
+  [`docs/verbindingen.md`](docs/verbindingen.md). De Dataverse-route (app-only) is
+  geïmplementeerd: de verbindingstest komt tot bij Microsoft, maar slagen kan pas met
+  een geldig client secret en een application user in SAV-TEST
+  (zie [`START.md`](START.md) §4).
 - Schrijfacties (INSERT/UPDATE/DELETE) zijn bewust uitgeschakeld.
 
 ## Snel starten
@@ -41,9 +44,13 @@ en Node 26.
 ### Eerste query
 
 ```bash
+# verbindingen (standaard: de mock)
+curl -s http://127.0.0.1:4108/api/connections
+
+# query op de standaardverbinding
 curl -s -X POST http://127.0.0.1:4108/api/query \
   -H 'content-type: application/json' \
-  -d '{"sql":"SELECT name, revenue FROM account ORDER BY revenue DESC","environment":"mock"}'
+  -d '{"sql":"SELECT name, revenue FROM account ORDER BY revenue DESC"}'
 ```
 
 Het antwoord bevat de rijen, de duur en **de FetchXML** die de engine van je SQL maakte.
@@ -51,9 +58,9 @@ Het antwoord bevat de rijen, de duur en **de FetchXML** die de engine van je SQL
 ## Structuur
 
 ```
-backend/XrmPocket.Api/    ASP.NET Core-API + SQL 4 CDS-engine + mock-connector
+backend/XrmPocket.Api/    ASP.NET Core-API + SQL 4 CDS-engine + verbindingen + mock
 web/                      React + TypeScript + Vite (PWA)
-docs/                     spike-verslagen en architectuur
+docs/                     spike, architectuur, verbindingen
 afspraken/decisions.yaml  projectbeslissingen (met datum, rationale, handhaving)
 START.md / CONTEXT.md     overdracht en projectoverzicht
 ```
@@ -63,9 +70,11 @@ START.md / CONTEXT.md     overdracht en projectoverzicht
 - Alleen **dev / test / acc** (standaard SAV-TEST); productie staat uit en heeft bewust
   geen alias — enkel de volledige URL.
 - Het client secret leeft server-side in `~/.config/opencode/secrets/` (chmod 600);
-  nooit in de repo, nooit in de UI, nooit in logs.
+  nooit in de repo, nooit in de UI, nooit in logs. Verbindingen staan in
+  `~/.config/xrmpocket/connections.json` (chmod 600) — zonder secret.
 - Alleen leesqueries; de backend weigert schrijfacties.
 - Geen echte klantgegevens als testmateriaal — de mock-dataset is verzonnen.
 
-Details: [`docs/architectuur.md`](docs/architectuur.md) · beslissingen:
+Details: [`docs/architectuur.md`](docs/architectuur.md) ·
+[`docs/verbindingen.md`](docs/verbindingen.md) · beslissingen:
 [`afspraken/decisions.yaml`](afspraken/decisions.yaml).

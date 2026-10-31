@@ -14,12 +14,13 @@ iPhone / laptop (browser of PWA)
         │  HTTP, dezelfde origin
         ▼
 XrmPocket.Api  (ASP.NET Core, .NET 10, poort 4108)
-   ├─ /api/environments   welke omgevingen zijn bruikbaar
-   ├─ /api/query          SQL → FetchXML → rijen
+   ├─ /api/connections     verbindingen (lijst, standaard, test, secret)
+   ├─ /api/environments    sjablonen dev/test/acc/productie
+   ├─ /api/query           SQL → FetchXML → rijen
    └─ statische bestanden: de gebouwde frontend (wwwroot)
         │
         ├── MockDataset + MockOrganizationService   (synthetisch, geen verbinding)
-        └── ServiceClient (app-only client credentials)
+        └── ConnectionFactory → ServiceClient (app-only client credentials)
                  │
                  ▼
         Dataverse: dev / test / acc  (standaard SAV-TEST)
@@ -31,8 +32,10 @@ XrmPocket.Api  (ASP.NET Core, .NET 10, poort 4108)
   Praat **uitsluitend** met de eigen API; nooit rechtstreeks met Dataverse.
 - **Secrets**: het client secret staat in
   `~/.config/opencode/secrets/sapphire_bot_test_secret.txt` (chmod 600). De backend
-  leest het bestand; het pad staat in `appsettings.json`. De repo, de UI en de
-  API-antwoorden bevatten nooit de waarde.
+  leest het bestand; het pad staat per verbinding in `connections.json`. De repo, de
+  UI en de API-antwoorden bevatten nooit de waarde.
+- **Verbindingen**: opgeslagen in `~/.config/xrmpocket/connections.json`
+  (zie [`verbindingen.md`](verbindingen.md)).
 
 ## Poorten
 
@@ -42,30 +45,49 @@ XrmPocket.Api  (ASP.NET Core, .NET 10, poort 4108)
 | **4108** | XrmPocket-API + gebouwde PWA |
 | 5173 | Vite dev-server (proxy `/api` → 4108) |
 
+## Verbindingen
+
+Verbindingen werken zoals in XrmToolBox: een **lijst met opgeslagen verbindingen**,
+een **standaardverbinding**, per verbinding een test (WhoAmI) en een eigen
+kleurmarkering per omgeving. Het volledige model en de vergelijking met XrmToolBox
+staan in [`verbindingen.md`](verbindingen.md).
+
+- Bewaard in `~/.config/xrmpocket/connections.json` (chmod 600, buiten de repo).
+- Het client secret staat **niet** in dat bestand: enkel het pad naar het
+  secret-bestand (chmod 600). Dit is bewust strenger dan XrmToolBox, dat secrets
+  versleuteld in het connection-bestand bewaart met een sleutel die in de app zit.
+- Bij de eerste start staan **Mock (synthetisch)** (standaard) en **SAV-TEST**
+  klaar.
+
 ## API
 
-### `GET /api/environments`
+### Verbindingen
 
-```json
-{ "environments": [ { "id": "mock", "label": "Mock (synthetisch)", "kind": "mock",
-  "url": null, "production": false, "configured": true, "note": "…" } ] }
-```
-
-`configured: false` + `note` zegt waarom (bv. "client secret is onbruikbaar (te kort)").
+| Endpoint | Doel |
+|---|---|
+| `GET /api/connections` | lijst + `defaultConnectionId`; per verbinding `configured`, `secretPresent`, `note` |
+| `POST /api/connections` | aanmaken of wijzigen (naam, soort, omgeving, URL, client-ID, tenant, time-out, highlight) |
+| `DELETE /api/connections/{id}` | verwijderen |
+| `POST /api/connections/{id}/default` | standaardverbinding kiezen |
+| `POST /api/connections/{id}/test` | WhoAmI-test: omgeving, versie, gebruikers-id, of een foutcode met hint |
+| `POST /api/connections/{id}/secret` | client secret bewaren (chmod 600); de waarde komt nooit terug |
+| `GET /api/environments` | sjablonen (dev/test/acc/productie) voor nieuwe verbindingen |
 
 ### `POST /api/query`
 
 ```json
-{ "sql": "SELECT name FROM account", "environment": "mock", "maxRows": 200 }
+{ "sql": "SELECT name FROM account", "connectionId": "…", "maxRows": 200 }
 ```
 
-Antwoord: `columns`, `rows`, `rowCount`, `truncated`, `durationMs`, `fetchXml[]` en
-`error { code, message, hint }`.
+`connectionId` leeg = de standaardverbinding. (Voor compatibiliteit werkt ook nog
+`environment: "test"`, dat de verbinding met die omgevingsnaam zoekt.)
 
-Standaardomgeving is `test` (SAV-TEST); de UI begint bij de eerste bruikbare omgeving
-(nu: `mock`). Foutcodes: `empty_sql`, `sql_too_long`, `unknown_environment`,
-`environment_not_configured`, `write_not_allowed`, `connect_failed`, `not_supported`,
-`sql_error`, `unexpected`.
+Antwoord: `columns`, `rows`, `rowCount`, `truncated`, `durationMs`, `fetchXml[]`,
+`connectionId`, `connectionName` en `error { code, message, hint }`.
+
+Foutcodes: `empty_sql`, `sql_too_long`, `unknown_connection`,
+`connection_not_configured`, `write_not_allowed`, `not_supported`, `sql_error`,
+`unexpected`.
 
 ## Veiligheidsregels in de backend
 
@@ -103,8 +125,9 @@ foutmelding in plaats van een stil verkeerd resultaat.
 
 ## Wat nog niet bestaat
 
-- Dataverse-route is geïmplementeerd (`ServiceClient` met client credentials) maar
-  **onGETEST**: de blokkers staan in `START.md` §4 (nieuw client secret + application
-  user in SAV-TEST).
+- Dataverse-route is geïmplementeerd (`ServiceClient` met client credentials) en de
+  verbindingstest komt tot bij Microsoft (`AADSTS7000215` bij een nep-secret, dus de
+  flow klopt), maar een **geslaagde** verbinding is nog niet mogelijk: de blokkers
+  staan in `START.md` §4 (nieuw client secret + application user in SAV-TEST).
 - Schrijfacties (INSERT/UPDATE/DELETE) — bewust uit.
 - Andere XrmToolBox-tools (fase 4).
