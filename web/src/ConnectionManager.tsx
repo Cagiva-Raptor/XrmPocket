@@ -4,6 +4,8 @@ import {
   saveConnection,
   saveSecret,
   setDefaultConnection,
+  signOut,
+  startSignIn,
   testConnection,
   type ConnectionInput,
   type ConnectionTestResult,
@@ -17,6 +19,7 @@ interface Props {
   open: boolean
   connections: SavedConnection[]
   templates: EnvironmentTemplate[]
+  redirectUri: string
   onClose: () => void
   onChanged: () => void
 }
@@ -39,7 +42,7 @@ const EMPTY_FORM: ConnectionInput = {
  * verwijderen. Het client secret gaat als losse stap naar de backend (nooit in de
  * verbinding zelf).
  */
-export function ConnectionManager({ open, connections, templates, onClose, onChanged }: Props) {
+export function ConnectionManager({ open, connections, templates, redirectUri, onClose, onChanged }: Props) {
   const [form, setForm] = useState<ConnectionInput>(EMPTY_FORM)
   const [editing, setEditing] = useState<string | null>(null)
   const [secret, setSecret] = useState('')
@@ -108,6 +111,10 @@ export function ConnectionManager({ open, connections, templates, onClose, onCha
     try {
       const saved = await saveConnection(form)
 
+      if (saved.authType === 'interactive') {
+        setMessage(`'${saved.name}' bewaard. Klik nu op 'Aanmelden met Microsoft'.`)
+      }
+
       if (secret.trim() && form.kind === 'dataverse') {
         await saveSecret(saved.id, secret.trim())
         setSecret('')
@@ -172,6 +179,38 @@ export function ConnectionManager({ open, connections, templates, onClose, onCha
     }
   }
 
+  async function handleSignIn(connection: SavedConnection) {
+    setBusy(true)
+    setError(null)
+
+    try {
+      const { authorizationUrl } = await startSignIn(connection.id)
+      // De browser gaat naar Microsoft en komt terug op de callback-URL.
+      window.location.href = authorizationUrl
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+      setBusy(false)
+    }
+  }
+
+  async function handleSignOut(connection: SavedConnection) {
+    setBusy(true)
+
+    try {
+      await signOut(connection.id)
+      setTests((current) => {
+        const next = { ...current }
+        delete next[connection.id]
+        return next
+      })
+      onChanged()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Verbindingen beheren">
       <div className="modal">
@@ -204,7 +243,25 @@ export function ConnectionManager({ open, connections, templates, onClose, onCha
                     </div>
                   </div>
 
+                  {connection.authType === 'interactive' && (
+                    <p className={connection.signedIn ? 'test-ok' : 'hint'}>
+                      {connection.signedIn
+                        ? `Aangemeld als ${connection.account ?? 'onbekend account'}`
+                        : 'Nog niet aangemeld met een Microsoft-account.'}
+                    </p>
+                  )}
+
                   <div className="connection-actions">
+                    {connection.authType === 'interactive' && !connection.signedIn && (
+                      <button className="run small" disabled={busy} onClick={() => void handleSignIn(connection)}>
+                        Aanmelden met Microsoft
+                      </button>
+                    )}
+                    {connection.authType === 'interactive' && connection.signedIn && (
+                      <button className="ghost" disabled={busy} onClick={() => void handleSignOut(connection)}>
+                        Afmelden
+                      </button>
+                    )}
                     <button className="ghost" disabled={busy} onClick={() => void handleTest(connection)}>
                       Testen
                     </button>
@@ -283,10 +340,8 @@ export function ConnectionManager({ open, connections, templates, onClose, onCha
                   <label className="field">
                     <span>Authenticatie</span>
                     <select value={form.authType} onChange={(event) => setForm({ ...form, authType: event.target.value })}>
+                      <option value="interactive">Interactief (aanmelden met je account)</option>
                       <option value="app-only">App-only (client credentials)</option>
-                      <option value="interactive" disabled>
-                        Interactief (geblokkeerd door CA)
-                      </option>
                     </select>
                   </label>
 
@@ -319,16 +374,26 @@ export function ConnectionManager({ open, connections, templates, onClose, onCha
                     />
                   </label>
 
-                  <label className="field wide">
-                    <span>Client secret {editing ? '(leeg = ongewijzigd)' : ''}</span>
-                    <input
-                      type="password"
-                      value={secret}
-                      onChange={(event) => setSecret(event.target.value)}
-                      placeholder="Value uit de app registration"
-                      autoComplete="off"
-                    />
-                  </label>
+                  {form.authType === 'app-only' ? (
+                    <label className="field wide">
+                      <span>Client secret {editing ? '(leeg = ongewijzigd)' : ''}</span>
+                      <input
+                        type="password"
+                        value={secret}
+                        onChange={(event) => setSecret(event.target.value)}
+                        placeholder="Value uit de app registration"
+                        autoComplete="off"
+                      />
+                    </label>
+                  ) : (
+                    <p className="hint wide">
+                      Bij interactief meld je je aan met je eigen Microsoft-account; er is geen client
+                      secret nodig. Zet in de app registration (platform <strong>Web</strong>) deze
+                      redirect-URI:{' '}
+                      <code>{redirectUri}</code> en geef de gedelegeerde toestemming{' '}
+                      <code>Dataverse &gt; user_impersonation</code> (met admin consent).
+                    </p>
+                  )}
                 </>
               )}
             </div>

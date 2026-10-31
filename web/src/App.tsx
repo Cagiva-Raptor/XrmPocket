@@ -40,6 +40,8 @@ function App() {
   const [connections, setConnections] = useState<SavedConnection[]>([])
   const [templates, setTemplates] = useState<EnvironmentTemplate[]>([])
   const [connectionId, setConnectionId] = useState(() => localStorage.getItem(CONNECTION_STORAGE_KEY) ?? '')
+  const [redirectUri, setRedirectUri] = useState('')
+  const [notice, setNotice] = useState<string | null>(null)
   const [managerOpen, setManagerOpen] = useState(false)
   const [test, setTest] = useState<ConnectionTestResult | null>(null)
   const [sql, setSql] = useState(() => localStorage.getItem(SQL_STORAGE_KEY) ?? EXAMPLES[0].sql)
@@ -54,6 +56,7 @@ function App() {
       const [list, environmentTemplates] = await Promise.all([listConnections(), fetchEnvironmentTemplates()])
       setConnections(list.connections)
       setTemplates(environmentTemplates)
+      setRedirectUri(list.interactiveRedirectUri)
 
       const stored = localStorage.getItem(CONNECTION_STORAGE_KEY)
       const known = list.connections.find((connection) => connection.id === stored)
@@ -72,6 +75,30 @@ function App() {
   }, [])
 
   useEffect(() => {
+    void reload()
+  }, [reload])
+
+  // Terugkeer van de Microsoft-aanmelding: ?auth=ok of ?auth=error&code&message.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const auth = params.get('auth')
+
+    if (!auth) return
+
+    const connection = params.get('connection')
+    const code = params.get('code')
+    const message = params.get('message')
+
+    if (auth === 'ok') {
+      setNotice(`Aangemeld${connection ? '' : ''}. Test de verbinding om je gebruiker en rollen te zien.`)
+      if (connection) setConnectionId(connection)
+      setManagerOpen(true)
+    } else {
+      setFatal(`${code ?? 'auth_error'}: ${message ?? 'Aanmelden mislukt.'}`)
+      setManagerOpen(true)
+    }
+
+    window.history.replaceState({}, '', window.location.pathname)
     void reload()
   }, [reload])
 
@@ -206,6 +233,7 @@ function App() {
       )}
 
       {fatal && <p className="notice error">{fatal}</p>}
+      {notice && <p className="notice">{notice}</p>}
 
       <section className="editor">
         <div className="editor-head">
@@ -314,6 +342,7 @@ function App() {
         open={managerOpen}
         connections={connections}
         templates={templates}
+        redirectUri={redirectUri}
         onClose={() => setManagerOpen(false)}
         onChanged={() => void reload()}
       />

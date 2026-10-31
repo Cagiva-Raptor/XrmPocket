@@ -26,6 +26,27 @@ public sealed class XrmPocketOptions
     /// </summary>
     public string ConnectionsFile { get; set; } = "~/.config/xrmpocket/connections.json";
 
+    /// <summary>
+    /// Callback-URL voor interactieve aanmelding (OAuth). Moet exact gelijk zijn aan
+    /// wat er in de app registration onder platform "Web" staat.
+    /// </summary>
+    public string InteractiveRedirectUri { get; set; } = "http://localhost:4108/api/auth/callback";
+
+    /// <summary>
+    /// Toegestane origins voor interactieve aanmelding (bijv. http://localhost:4108,
+    /// http://192.168.9.9:4108 of de HTTPS-Tailscale-URL). De UI stuurt zijn eigen
+    /// origin mee; alleen deze lijst wordt aanvaard (geen open redirect).
+    /// </summary>
+    public string[] InteractiveAllowedOrigins { get; set; } = Array.Empty<string>();
+
+    /// <summary>Waar de browser naartoe gaat na een geslaagde aanmelding.</summary>
+    public string AppBaseUrl { get; set; } = "/";
+
+    /// <summary>
+    /// Map met tokens per verbinding (refresh tokens, chmod 600, buiten de repo).
+    /// </summary>
+    public string TokenDirectory { get; set; } = "~/.config/xrmpocket/tokens";
+
     /// <summary>Standaard aantal rijen dat een query teruggeeft.</summary>
     public int DefaultMaxRows { get; set; } = 200;
 

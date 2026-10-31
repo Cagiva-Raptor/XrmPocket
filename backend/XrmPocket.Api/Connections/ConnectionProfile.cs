@@ -70,7 +70,9 @@ public sealed record SavedConnection(
     bool Configured,
     bool SecretPresent,
     string? Note,
-    DateTimeOffset? LastUsedOn);
+    DateTimeOffset? LastUsedOn,
+    bool SignedIn,
+    string? Account);
 
 /// <summary>
 /// Resultaat van een verbindingstest — precies wat XrmToolBox in zijn statusbalk

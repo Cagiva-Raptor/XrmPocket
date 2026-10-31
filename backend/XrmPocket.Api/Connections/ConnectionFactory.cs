@@ -21,13 +21,19 @@ public sealed class ConnectionFactory
 {
     private readonly XrmPocketOptions _options;
     private readonly MockDataset _mockDataset;
+    private readonly InteractiveAuthService _interactiveAuth;
     private readonly ILogger<ConnectionFactory> _logger;
     private readonly ConcurrentDictionary<string, CacheEntry> _cache = new(StringComparer.OrdinalIgnoreCase);
 
-    public ConnectionFactory(IOptions<XrmPocketOptions> options, MockDataset mockDataset, ILogger<ConnectionFactory> logger)
+    public ConnectionFactory(
+        IOptions<XrmPocketOptions> options,
+        MockDataset mockDataset,
+        InteractiveAuthService interactiveAuth,
+        ILogger<ConnectionFactory> logger)
     {
         _options = options.Value;
         _mockDataset = mockDataset;
+        _interactiveAuth = interactiveAuth;
         _logger = logger;
     }
 
@@ -245,14 +251,21 @@ public sealed class ConnectionFactory
         if (profile.IsMock)
             return null;
 
-        if (!string.Equals(profile.AuthType, "app-only", StringComparison.OrdinalIgnoreCase))
-            return "Deze authenticatievorm is nog niet ondersteund (interactieve login wordt door CA geblokkeerd).";
-
         if (string.IsNullOrWhiteSpace(profile.Url))
             return "Geen URL ingesteld.";
 
         if (string.IsNullOrWhiteSpace(profile.ClientId))
             return "Geen client-ID ingesteld.";
+
+        if (IsInteractive(profile))
+        {
+            if (string.IsNullOrWhiteSpace(profile.TenantId))
+                return "Geen tenant-ID ingesteld.";
+
+            return _interactiveAuth.IsSignedIn(profile)
+                ? null
+                : "Nog niet aangemeld: meld aan met je Microsoft-account.";
+        }
 
         var secretPath = ResolveSecretPath(profile);
         var secretLength = SecretLength(secretPath);
@@ -266,7 +279,13 @@ public sealed class ConnectionFactory
         return null;
     }
 
-    public bool HasSecret(ConnectionProfile profile) => profile.IsMock || SecretLength(ResolveSecretPath(profile)) >= 20;
+    public bool HasSecret(ConnectionProfile profile) =>
+        profile.IsMock ||
+        (IsInteractive(profile) ? _interactiveAuth.IsSignedIn(profile) : SecretLength(ResolveSecretPath(profile)) >= 20);
+
+    /// <summary>Waar: deze verbinding meldt aan met het eigen Microsoft-account.</summary>
+    public static bool IsInteractive(ConnectionProfile profile) =>
+        string.Equals(profile.AuthType, "interactive", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Schrijft een nieuw client secret weg (chmod 600) en geeft het pad terug.</summary>
     public string SaveSecret(ConnectionProfile profile, string secret)
@@ -299,6 +318,18 @@ public sealed class ConnectionFactory
 
     private ServiceClient CreateClient(ConnectionProfile profile)
     {
+        if (IsInteractive(profile))
+        {
+            // Delegated: elke aanroep gebeurt als de aangemelde gebruiker. De
+            // token-provider haalt (en ververst) het access token; het refresh token
+            // staat in een bestand met chmod 600.
+            return new ServiceClient(
+                new Uri(profile.Url!),
+                _ => _interactiveAuth.GetAccessTokenAsync(profile),
+                useUniqueInstance: true,
+                logger: null);
+        }
+
         var secretPath = ResolveSecretPath(profile);
         var secret = File.ReadAllText(secretPath).Trim();
 
@@ -312,6 +343,10 @@ public sealed class ConnectionFactory
 
         return client;
     }
+
+    /// <summary>Pad van het token-bestand (voor de vingerafdruk bij interactieve verbindingen).</summary>
+    private string TokenFingerprintPath(ConnectionProfile profile)
+        => Path.Combine(XrmPocketOptions.ExpandPath(_options.TokenDirectory), profile.Id + ".json");
 
     private static long SecretLength(string path)
     {
@@ -331,7 +366,7 @@ public sealed class ConnectionFactory
     /// </summary>
     private string Fingerprint(ConnectionProfile profile)
     {
-        var secretPath = ResolveSecretPath(profile);
+        var secretPath = IsInteractive(profile) ? TokenFingerprintPath(profile) : ResolveSecretPath(profile);
         var lastWrite = File.Exists(secretPath) ? File.GetLastWriteTimeUtc(secretPath).Ticks.ToString(CultureInfo.InvariantCulture) : "0";
 
         return string.Join('|',

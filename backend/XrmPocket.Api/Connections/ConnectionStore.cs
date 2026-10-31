@@ -248,8 +248,16 @@ public sealed class ConnectionStore
     private static string NormalizeKind(string? kind) =>
         string.Equals(kind, "mock", StringComparison.OrdinalIgnoreCase) ? "mock" : "dataverse";
 
-    private static string NormalizeAuthType(string? authType) =>
-        string.Equals(authType, "none", StringComparison.OrdinalIgnoreCase) ? "none" : "app-only";
+    /// <summary>
+    /// none = mock, app-only = client credentials, interactive = aanmelden met je
+    /// eigen Microsoft-account (zoals XrmToolBox' Office365-verbinding).
+    /// </summary>
+    private static string NormalizeAuthType(string? authType) => authType?.Trim().ToLowerInvariant() switch
+    {
+        "none" => "none",
+        "interactive" => "interactive",
+        _ => "app-only"
+    };
 
     private static string NormalizeHighlight(string? highlight, string environment)
     {

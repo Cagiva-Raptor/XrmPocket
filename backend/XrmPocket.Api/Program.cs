@@ -10,6 +10,7 @@ builder.Services.Configure<XrmPocketOptions>(builder.Configuration.GetSection(Xr
 builder.Services.AddSingleton<EnvironmentTemplateCatalog>();
 builder.Services.AddSingleton<MockDataset>();
 builder.Services.AddSingleton<ConnectionStore>();
+builder.Services.AddSingleton<InteractiveAuthService>();
 builder.Services.AddSingleton<ConnectionFactory>();
 builder.Services.AddSingleton<QueryService>();
 
@@ -42,18 +43,19 @@ app.MapGet("/api/environments", (EnvironmentTemplateCatalog catalog)
     => Results.Ok(new { environments = catalog.List() }));
 
 // Verbindingen — het equivalent van de Connection Manager in XrmToolBox.
-app.MapGet("/api/connections", (ConnectionStore store, ConnectionFactory factory) =>
+app.MapGet("/api/connections", (ConnectionStore store, ConnectionFactory factory, InteractiveAuthService auth) =>
 {
     var defaultConnection = store.GetDefault();
 
     return Results.Ok(new
     {
         defaultConnectionId = defaultConnection?.Id,
-        connections = store.List().Select(profile => ToInfo(profile, store, factory)).ToList()
+        interactiveRedirectUri = auth.RedirectUri,
+        connections = store.List().Select(profile => ToInfo(profile, store, factory, auth)).ToList()
     });
 });
 
-app.MapPost("/api/connections", (SaveConnectionRequest request, ConnectionStore store, ConnectionFactory factory) =>
+app.MapPost("/api/connections", (SaveConnectionRequest request, ConnectionStore store, ConnectionFactory factory, InteractiveAuthService auth) =>
 {
     var profile = store.Upsert(request, out var error);
 
@@ -62,7 +64,7 @@ app.MapPost("/api/connections", (SaveConnectionRequest request, ConnectionStore 
 
     factory.Invalidate(profile.Id);
 
-    return Results.Ok(ToInfo(profile, store, factory));
+    return Results.Ok(ToInfo(profile, store, factory, auth));
 });
 
 app.MapDelete("/api/connections/{id}", (string id, ConnectionStore store, ConnectionFactory factory) =>
@@ -74,13 +76,13 @@ app.MapDelete("/api/connections/{id}", (string id, ConnectionStore store, Connec
     return Results.Ok(new { deleted = id });
 });
 
-app.MapPost("/api/connections/{id}/default", (string id, ConnectionStore store, ConnectionFactory factory) =>
+app.MapPost("/api/connections/{id}/default", (string id, ConnectionStore store, ConnectionFactory factory, InteractiveAuthService auth) =>
 {
     if (!store.SetDefault(id))
         return Results.NotFound(new { error = "Verbinding niet gevonden." });
 
     var profile = store.Get(id)!;
-    return Results.Ok(ToInfo(profile, store, factory));
+    return Results.Ok(ToInfo(profile, store, factory, auth));
 });
 
 app.MapPost("/api/connections/{id}/test", (string id, ConnectionStore store, ConnectionFactory factory) =>
@@ -122,6 +124,93 @@ app.MapPost("/api/connections/{id}/secret", (string id, SaveSecretRequest reques
     }
 });
 
+// Interactief aanmelden met het eigen Microsoft-account (zoals XrmToolBox' Office365).
+app.MapPost("/api/connections/{id}/signin", (string id, SignInRequest? request, ConnectionStore store, InteractiveAuthService auth) =>
+{
+    var profile = store.Get(id);
+
+    if (profile == null)
+        return Results.NotFound(new { error = "Verbinding niet gevonden." });
+
+    if (profile.IsMock)
+        return Results.BadRequest(new { error = "De mock-verbinding heeft geen aanmelding nodig." });
+
+    if (!ConnectionFactory.IsInteractive(profile))
+        return Results.BadRequest(new { error = "Deze verbinding gebruikt app-only; zet de authenticatie op 'interactief' om aan te melden." });
+
+    try
+    {
+        var start = auth.StartSignIn(profile, request?.Origin);
+        return Results.Ok(new { authorizationUrl = start.AuthorizationUrl, redirectUri = start.RedirectUri });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return Results.BadRequest(new { error = ex.Message });
+    }
+});
+
+// Entra stuurt de browser hier terug (redirect-URI uit de app registration).
+app.MapGet("/api/auth/callback", async (
+    string? code,
+    string? state,
+    string? error,
+    string? error_description,
+    InteractiveAuthService auth,
+    ConnectionFactory factory,
+    CancellationToken cancellationToken) =>
+{
+    var returnTo = auth.AppBaseUrlFor(state);
+    var result = await auth.HandleCallbackAsync(code, state, error, error_description, cancellationToken);
+
+    if (result.ConnectionId != null)
+        factory.Invalidate(result.ConnectionId);
+
+    var target = returnTo;
+
+    if (result.Ok)
+    {
+        target += (target.Contains('?') ? "&" : "?") + "auth=ok&connection=" + Uri.EscapeDataString(result.ConnectionId ?? "");
+    }
+    else
+    {
+        target += (target.Contains('?') ? "&" : "?") +
+                  "auth=error&code=" + Uri.EscapeDataString(result.ErrorCode ?? "unknown") +
+                  "&message=" + Uri.EscapeDataString(result.Message ?? "Aanmelden mislukt.");
+    }
+
+    return Results.Redirect(target);
+});
+
+app.MapPost("/api/connections/{id}/signout", (string id, ConnectionStore store, InteractiveAuthService auth, ConnectionFactory factory) =>
+{
+    var profile = store.Get(id);
+
+    if (profile == null)
+        return Results.NotFound(new { error = "Verbinding niet gevonden." });
+
+    auth.SignOut(profile);
+    factory.Invalidate(id);
+
+    return Results.Ok(new { signedOut = id });
+});
+
+app.MapGet("/api/connections/{id}/auth", (string id, ConnectionStore store, InteractiveAuthService auth) =>
+{
+    var profile = store.Get(id);
+
+    if (profile == null)
+        return Results.NotFound(new { error = "Verbinding niet gevonden." });
+
+    return Results.Ok(new
+    {
+        authType = profile.AuthType,
+        signedIn = auth.IsSignedIn(profile),
+        account = auth.Account(profile),
+        expiresOn = auth.ExpiresOn(profile),
+        redirectUri = auth.RedirectUri
+    });
+});
+
 app.MapPost("/api/query", async (QueryRequest request, QueryService service, CancellationToken cancellationToken)
     => Results.Ok(await service.ExecuteAsync(request, cancellationToken)));
 
@@ -130,7 +219,8 @@ app.MapFallbackToFile("index.html");
 
 app.Run();
 
-static SavedConnection ToInfo(ConnectionProfile profile, ConnectionStore store, ConnectionFactory factory)
+
+static SavedConnection ToInfo(ConnectionProfile profile, ConnectionStore store, ConnectionFactory factory, InteractiveAuthService auth)
 {
     var missing = factory.DescribeMissingConfiguration(profile);
     var isDefault = store.GetDefault()?.Id == profile.Id;
@@ -150,5 +240,7 @@ static SavedConnection ToInfo(ConnectionProfile profile, ConnectionStore store, 
         missing == null,
         factory.HasSecret(profile),
         missing,
-        profile.LastUsedOn);
+        profile.LastUsedOn,
+        auth.IsSignedIn(profile),
+        auth.Account(profile));
 }

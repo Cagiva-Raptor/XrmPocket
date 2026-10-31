@@ -23,10 +23,13 @@ export interface SavedConnection {
   secretPresent: boolean
   note: string | null
   lastUsedOn: string | null
+  signedIn: boolean
+  account: string | null
 }
 
 export interface ConnectionList {
   defaultConnectionId: string | null
+  interactiveRedirectUri: string
   connections: SavedConnection[]
 }
 
@@ -149,6 +152,23 @@ export function saveSecret(id: string, secret: string): Promise<{ ok: boolean; m
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ secret }),
   })
+}
+
+/**
+ * Start interactief aanmelden; de UI opent de teruggegeven URL.
+ * De origin gaat mee zodat de callback-URL klopt met het adres waarop je werkt
+ * (localhost, LAN of Tailscale).
+ */
+export function startSignIn(id: string): Promise<{ authorizationUrl: string; redirectUri: string }> {
+  return request<{ authorizationUrl: string; redirectUri: string }>(`/api/connections/${id}/signin`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ origin: window.location.origin }),
+  })
+}
+
+export function signOut(id: string): Promise<{ signedOut: string }> {
+  return request<{ signedOut: string }>(`/api/connections/${id}/signout`, { method: 'POST' })
 }
 
 export function runQuery(sql: string, connectionId: string | null, maxRows: number): Promise<QueryResponse> {
