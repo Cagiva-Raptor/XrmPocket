@@ -61,7 +61,19 @@ client. Beslis dat niet nu.
 
 ## 4. Blokkerend vs. niet-blokkerend
 
-### ⛔ Wacht op de gebruiker (doe dit dus eerst zonder)
+### Twee routes naar een echte verbinding (2026-11-01)
+
+Sinds `2026-11-01-interactieve-login-als-tweede-authvorm` zijn er twee manieren:
+
+- **A — interactief (jouw account):** app registration voorzien van een redirect-URI
+  (platform *Web*, bv. `http://localhost:4108/api/auth/callback`), de gedelegeerde
+  toestemming `Dataverse > user_impersonation` + admin consent, daarna in XrmPocket
+  *Verbindingen…* > authenticatie **Interactief** > **Aanmelden met Microsoft**.
+  Geen client secret nodig. CA kan alsnog weigeren (`AADSTS530033`) als het apparaat
+  niet compliant is; buiten localhost is HTTPS verplicht (zie `docs/verbindingen.md`).
+- **B — app-only (client secret):** onderstaande blokkers.
+
+### ⛔ Wacht op de gebruiker (voor de app-only-route)
 
 1. **Nieuw client secret** voor app "Sapphire AI Bot - Test" — de huidige secret-file
    bevat een onbruikbaar 4-byte fragment (`invalid_client`). Aanmaken in de portal →

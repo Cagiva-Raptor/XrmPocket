@@ -50,6 +50,12 @@ Bij context (gecheckt die dag, geen veronderstellingen):
     XrmToolBox), statusbalk, resultaatgrid, FetchXML-paneel, PWA-manifest
   - **mock-connector**: synthetische `account`/`contact`/`incident` met metadata,
     relaties, filters, JOINs, sortering, TOP en GROUP BY
+  - **Twee authvormen** (`2026-11-01-interactieve-login-als-tweede-authvorm`):
+    **app-only** (client secret) en **interactief** (aanmelden met je eigen
+    Microsoft-account via OAuth + PKCE in de browser; refresh token in
+    `~/.config/xrmpocket/tokens/`, chmod 600). De oude "alleen app-only"-regel is
+    daarmee vervallen; CA blijft wel een risico (`AADSTS530033`), want de aanmelding
+    moet vanaf een compliant apparaat gebeuren.
   - **Verbindingen zoals XrmToolBox** (`2026-10-31-verbindingen-zoals-xrmtoolbox`,
     uitleg in `docs/verbindingen.md`): lijst in `~/.config/xrmpocket/connections.json`
     (chmod 600), standaardverbinding, test (WhoAmI), kleurmarkering per omgeving en een
