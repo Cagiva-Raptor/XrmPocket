@@ -43,12 +43,19 @@ Bij context (gecheckt die dag, geen veronderstellingen):
   `docs/spike-2026-10-30-sql-naar-fetchxml.md`): SQL → FetchXML én uitvoering, zonder
   XrmToolBox en zonder Dataverse-verbinding.
 - **Draaiende app** (poort **4108**, zie `2026-10-31-app-poort-4108`):
-  - `backend/XrmPocket.Api` — `GET /api/environments`, `POST /api/query`,
-    serveert de gebouwde frontend; alleen leesqueries, rijlimiet, omgevingswhitelist
-  - `web/` — SQL-editor, omgevingskiezer, resultaatgrid, FetchXML-paneel, PWA-manifest
+  - `backend/XrmPocket.Api` — `/api/connections` (lijst, standaard, test, secret),
+    `/api/environments` (sjablonen), `POST /api/query`; serveert de gebouwde frontend;
+    alleen leesqueries, rijlimiet
+  - `web/` — SQL-editor, verbindingskiezer + beheer (zoals de Connection Manager van
+    XrmToolBox), statusbalk, resultaatgrid, FetchXML-paneel, PWA-manifest
   - **mock-connector**: synthetische `account`/`contact`/`incident` met metadata,
     relaties, filters, JOINs, sortering, TOP en GROUP BY
-  - Dataverse-route via `ServiceClient` (app-only) is **geïmplementeerd maar ongetest**
+  - **Verbindingen zoals XrmToolBox** (`2026-10-31-verbindingen-zoals-xrmtoolbox`,
+    uitleg in `docs/verbindingen.md`): lijst in `~/.config/xrmpocket/connections.json`
+    (chmod 600), standaardverbinding, test (WhoAmI), kleurmarkering per omgeving en een
+    secret per verbinding dat **buiten** het profiel staat
+  - Dataverse-route via `ServiceClient` (app-only): de test komt tot bij Microsoft
+    (`AADSTS7000215` bij een nep-secret), slagen wacht op de blokkers hieronder
 - **Toolchain**: .NET 10.0.403 (`brew install dotnet`,
   `export DOTNET_ROOT="/opt/homebrew/opt/dotnet/libexec"`), Node 26, npm 11
 - **SSH deploy key** klaar: `~/.ssh/gh-xrmtoolbox-ios-deploy` (ed25519, geen

@@ -140,3 +140,39 @@ notes:
       - web/vite.config.ts
       - docs/architectuur.md
     status: active
+  - id: 2026-10-31-verbindingen-zoals-xrmtoolbox
+    date: 2026-10-31
+    title: "Verbindingen zoals XrmToolBox (lijst + standaard + test), maar secrets buiten het profiel"
+    decision: "Verbindingen volgen het model van XrmToolBox: een lijst met opgeslagen
+      verbindingen (ConnectionProfile met id, naam, soort, authType, omgeving, URL,
+      client-ID, tenant, time-out, kleurmarkering en laatst gebruikt), één
+      standaardverbinding, een test per verbinding (WhoAmI) en een eigen secret per
+      verbinding. De lijst staat in ~/.config/xrmpocket/connections.json (chmod 600,
+      buiten de repo). Het client secret staat NIET in dat bestand: het profiel bevat
+      enkel het pad naar een bestand met chmod 600; een nieuw secret gaat via
+      POST /api/connections/{id}/secret en wordt nooit teruggegeven of gelogd.
+      Alleen app-only (client credentials) is toegestaan; interactieve login blijft
+      uitgeschakeld. Handhaving: nooit een secret, wachtwoord of token in
+      connections.json, in een API-antwoord of in een log; geen GPL-code van
+      XrmToolBox of MscrmTools.Xrm.Connection overnemen (enkel gedrag bestuderen en
+      zelf implementeren); geen interactieve authenticatie aanzetten zonder nieuwe
+      beslissing die de CA-bevinding (AADSTS530033) weerlegt."
+    rationale: "De gebruiker vroeg om verbindingen op dezelfde manier als XrmToolBox
+      te doen. Brononderzoek (XrmToolBox + MscrmTools.Xrm.Connection, beide GPL-3.0)
+      toont: ConnectionDetail met URL's/tenant/authType/highlight/time-out/LastUsedOn,
+      een connection-lijst in XML, een Connection Manager, een initial connection bij
+      het starten, hergebruik van clients en een RequestPassword-stroom voor
+      ontbrekende secrets. Dat model nemen we over omdat het herkenbaar is en
+      veelomgevingenwerk ondersteunt. Op één punt wijken we bewust af: XrmToolBox
+      versleutelt secrets met een sleutel die in de applicatie zit (terug te vinden),
+      wij bewaren ze in een apart bestand met chmod 600 en houden enkel het pad in het
+      profiel — dat is beter te bewaken en houdt de repo schoon. Interactieve login
+      blijft uit omdat Conditional Access dat op onbeheerde apparaten blokkeert."
+    files:
+      - backend/XrmPocket.Api/Connections/ConnectionProfile.cs
+      - backend/XrmPocket.Api/Connections/ConnectionStore.cs
+      - backend/XrmPocket.Api/Connections/ConnectionFactory.cs
+      - web/src/ConnectionManager.tsx
+      - docs/verbindingen.md
+      - CONTEXT.md
+    status: active
