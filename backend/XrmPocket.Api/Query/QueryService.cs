@@ -1,41 +1,37 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using MarkMpn.Sql4Cds.Engine;
 using MarkMpn.Sql4Cds.Engine.ExecutionPlan;
 using Microsoft.Extensions.Options;
-using Microsoft.PowerPlatform.Dataverse.Client;
 using Microsoft.Xrm.Sdk;
 using XrmPocket.Api.Configuration;
-using XrmPocket.Api.Environments;
+using XrmPocket.Api.Connections;
 using XrmPocket.Api.Mock;
 
 namespace XrmPocket.Api.Query;
 
 /// <summary>
 /// De kern: SQL in, resultaat uit. De SQL 4 CDS-engine zet de SQL om naar FetchXML
-/// en voert die uit tegen de gekozen omgeving (mock of Dataverse).
+/// en voert die uit tegen de gekozen verbinding (mock of Dataverse).
 /// </summary>
 public sealed class QueryService
 {
     private const int MaxSqlLength = 20_000;
-    private const string DefaultEnvironment = "test";
 
-    private readonly EnvironmentCatalog _catalog;
+    private readonly ConnectionStore _connections;
+    private readonly ConnectionFactory _factory;
     private readonly XrmPocketOptions _options;
-    private readonly MockDataset _mockDataset;
-    private readonly ConcurrentDictionary<string, Lazy<ServiceClient>> _clients = new(StringComparer.OrdinalIgnoreCase);
     private readonly ILogger<QueryService> _logger;
 
     public QueryService(
-        EnvironmentCatalog catalog,
+        ConnectionStore connections,
+        ConnectionFactory factory,
         IOptions<XrmPocketOptions> options,
-        MockDataset mockDataset,
         ILogger<QueryService> logger)
     {
-        _catalog = catalog;
+        _connections = connections;
+        _factory = factory;
         _options = options.Value;
-        _mockDataset = mockDataset;
         _logger = logger;
     }
 
@@ -44,43 +40,44 @@ public sealed class QueryService
         var sql = request.Sql?.Trim();
 
         if (string.IsNullOrEmpty(sql))
-            return Fail(null, new QueryError("empty_sql", "De query is leeg.", "Typ een SELECT-statement en probeer opnieuw."));
+            return Fail(null, null, new QueryError("empty_sql", "De query is leeg.", "Typ een SELECT-statement en probeer opnieuw."));
 
         if (sql.Length > MaxSqlLength)
-            return Fail(null, new QueryError("sql_too_long", $"De query is te lang ({sql.Length} tekens, max {MaxSqlLength}).", null));
+            return Fail(null, null, new QueryError("sql_too_long", $"De query is te lang ({sql.Length} tekens, max {MaxSqlLength}).", null));
 
-        var environmentId = string.IsNullOrWhiteSpace(request.Environment) ? DefaultEnvironment : request.Environment.Trim();
-        var environment = _catalog.Find(environmentId);
+        var profile = ResolveConnection(request);
 
-        if (environment == null)
+        if (profile == null)
         {
-            return Fail(environmentId, new QueryError(
-                "unknown_environment",
-                $"Onbekende omgeving '{environmentId}'.",
-                "Kies een omgeving uit de lijst; 'mock' werkt altijd."));
+            return Fail(null, null, new QueryError(
+                "unknown_connection",
+                "Deze verbinding bestaat niet (meer).",
+                "Kies een verbinding in de lijst of maak een nieuwe aan."));
         }
 
-        if (!environment.Configured)
-        {
-            return Fail(environmentId, new QueryError(
-                "environment_not_configured",
-                $"Omgeving '{environment.Label}' is nog niet bruikbaar.",
-                (environment.Note ?? "Configuratie ontbreekt.") + " Gebruik 'mock' om de rest te testen."));
-        }
+        var missing = _factory.DescribeMissingConfiguration(profile);
 
-        var maxRows = Math.Clamp(request.MaxRows ?? _options.DefaultMaxRows, 1, _options.HardMaxRows);
+        if (missing != null)
+        {
+            return Fail(profile.Id, profile.Name, new QueryError(
+                "connection_not_configured",
+                $"Verbinding '{profile.Name}' is nog niet bruikbaar.",
+                missing));
+        }
 
         if (!SqlSafetyCheck.IsReadOnly(sql, out var unsafeReason))
         {
-            return Fail(environmentId, new QueryError(
+            return Fail(profile.Id, profile.Name, new QueryError(
                 "write_not_allowed",
                 "Deze versie voert enkel leesqueries uit.",
                 unsafeReason));
         }
 
+        var maxRows = Math.Clamp(request.MaxRows ?? _options.DefaultMaxRows, 1, _options.HardMaxRows);
+
         try
         {
-            var dataSource = GetDataSource(environment);
+            var dataSource = _factory.CreateDataSource(profile);
             var dataSources = new Dictionary<string, DataSource>(StringComparer.OrdinalIgnoreCase)
             {
                 [dataSource.Name] = dataSource
@@ -89,6 +86,7 @@ public sealed class QueryService
             using var connection = new Sql4CdsConnection(dataSources);
             using var command = connection.CreateCommand();
             command.CommandText = sql;
+            command.CommandTimeout = profile.TimeoutSeconds;
 
             var stopwatch = Stopwatch.StartNew();
 
@@ -128,11 +126,13 @@ public sealed class QueryService
             }
 
             stopwatch.Stop();
+            _connections.Touch(profile.Id);
 
             return new QueryResponse
             {
                 Ok = true,
-                Environment = environmentId,
+                ConnectionId = profile.Id,
+                ConnectionName = profile.Name,
                 Columns = columns,
                 Rows = rows,
                 Truncated = truncated,
@@ -142,21 +142,46 @@ public sealed class QueryService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Query op omgeving {Environment} mislukt", environmentId);
-            return Fail(environmentId, MapError(ex, environment));
+            _logger.LogWarning(ex, "Query op verbinding {Connection} mislukt", profile.Name);
+            return Fail(profile.Id, profile.Name, MapError(ex, profile));
         }
     }
 
-    private static QueryError MapError(Exception ex, EnvironmentInfo environment)
+    /// <summary>
+    /// Zoekt de verbinding: expliciet id, anders de oude omgevingsnaam, anders de
+    /// standaardverbinding (zoals XrmToolBox bij het starten de ingestelde
+    /// beginverbinding gebruikt).
+    /// </summary>
+    private ConnectionProfile? ResolveConnection(QueryRequest request)
+    {
+        if (!string.IsNullOrWhiteSpace(request.ConnectionId))
+            return _connections.Get(request.ConnectionId.Trim());
+
+        if (!string.IsNullOrWhiteSpace(request.Environment))
+        {
+            var wanted = request.Environment.Trim();
+            var match = _connections.List().FirstOrDefault(profile =>
+                string.Equals(profile.Environment, wanted, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(profile.Name, wanted, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(profile.Id, wanted, StringComparison.OrdinalIgnoreCase));
+
+            if (match != null)
+                return match;
+        }
+
+        return _connections.GetDefault();
+    }
+
+    private static QueryError MapError(Exception ex, ConnectionProfile profile)
     {
         var message = ex.GetBaseException().Message;
 
-        if (ex is FailedToConnectToDataverseException || message.Contains("FailedToConnect", StringComparison.OrdinalIgnoreCase))
+        if (ex is ConnectionNotConfiguredException)
         {
             return new QueryError(
-                "connect_failed",
-                $"Kan geen verbinding maken met {environment.Label}.",
-                "Controleer het client secret en de application user in Dataverse (zie START.md §4).");
+                "connection_not_configured",
+                $"Verbinding '{profile.Name}' is niet bruikbaar.",
+                message);
         }
 
         if (ex is NotSupportedException)
@@ -170,47 +195,21 @@ public sealed class QueryService
             return new QueryError(
                 "sql_error",
                 message.Trim(),
-                "Controleer tabel- en kolomnamen. In mock-modus bestaan: account, contact, incident.");
+                profile.IsMock
+                    ? "Controleer tabel- en kolomnamen. In mock-modus bestaan: account, contact, incident."
+                    : "Controleer tabel- en kolomnamen en je rechten in deze omgeving.");
         }
 
         return new QueryError("unexpected", message.Trim(), "Zie de backend-log voor details.");
     }
 
-    private static QueryResponse Fail(string? environmentId, QueryError error, IReadOnlyList<string>? fetchXml = null) => new()
+    private static QueryResponse Fail(string? connectionId, string? connectionName, QueryError error) => new()
     {
         Ok = false,
-        Environment = environmentId,
-        Error = error,
-        FetchXml = fetchXml ?? Array.Empty<string>()
+        ConnectionId = connectionId,
+        ConnectionName = connectionName,
+        Error = error
     };
-
-    private DataSource GetDataSource(EnvironmentInfo environment)
-    {
-        if (environment.Kind == "mock")
-            return MockOrganizationService.CreateDataSource(_mockDataset);
-
-        var client = _clients.GetOrAdd(environment.Id, id => new Lazy<ServiceClient>(() => CreateClient(environment))).Value;
-
-        if (!client.IsReady)
-        {
-            throw new FailedToConnectToDataverseException(
-                client.LastError ?? $"Verbinding met {environment.Label} is niet gereed.");
-        }
-
-        return new DataSource(client);
-    }
-
-    private ServiceClient CreateClient(EnvironmentInfo environment)
-    {
-        if (string.IsNullOrWhiteSpace(environment.Url))
-            throw new InvalidOperationException("Geen URL voor omgeving " + environment.Label);
-
-        var secretPath = XrmPocketOptions.ExpandPath(_options.ClientSecretFile);
-        var secret = File.ReadAllText(secretPath).Trim();
-
-        // Het secret blijft in dit proces; het komt nooit in een antwoord of log.
-        return new ServiceClient(new Uri(environment.Url), _options.ClientId, secret, useUniqueInstance: true, logger: null);
-    }
 
     private static IEnumerable<IExecutionPlanNode> Walk(IExecutionPlanNode node)
     {
@@ -237,12 +236,4 @@ public sealed class QueryService
         byte[] bytes => Convert.ToBase64String(bytes),
         _ => value
     };
-
-    /// <summary>Fout bij het opzetten van een Dataverse-verbinding (los type voor de mapper).</summary>
-    private sealed class FailedToConnectToDataverseException : Exception
-    {
-        public FailedToConnectToDataverseException(string message) : base(message)
-        {
-        }
-    }
 }

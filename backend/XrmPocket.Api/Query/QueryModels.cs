@@ -1,11 +1,17 @@
 namespace XrmPocket.Api.Query;
 
-/// <summary>Wat de client vraagt: SQL, optioneel een omgeving en een rijlimiet.</summary>
+/// <summary>Wat de client vraagt: SQL, een verbinding en een rijlimiet.</summary>
 public sealed class QueryRequest
 {
     public string Sql { get; set; } = "";
 
-    /// <summary>Id uit /api/environments. Leeg = de standaardomgeving (SAV-TEST).</summary>
+    /// <summary>Id van een opgeslagen verbinding. Leeg = de standaardverbinding.</summary>
+    public string? ConnectionId { get; set; }
+
+    /// <summary>
+    /// Verouderd: naam of omgevingssjabloon van een verbinding. Wordt gebruikt als
+    /// <see cref="ConnectionId"/> leeg is (oude clients/curl).
+    /// </summary>
     public string? Environment { get; set; }
 
     /// <summary>Aantal rijen dat de client wil; de backend kapt af op een harde grens.</summary>
@@ -23,8 +29,10 @@ public sealed class QueryResponse
 {
     public bool Ok { get; init; }
 
-    /// <summary>Omgeving die daadwerkelijk gebruikt is.</summary>
-    public string? Environment { get; init; }
+    /// <summary>Verbinding die daadwerkelijk gebruikt is.</summary>
+    public string? ConnectionId { get; init; }
+
+    public string? ConnectionName { get; init; }
 
     public IReadOnlyList<ResultColumn> Columns { get; init; } = Array.Empty<ResultColumn>();
 

@@ -20,6 +20,12 @@ public sealed class XrmPocketOptions
     /// </summary>
     public string ClientSecretFile { get; set; } = "~/.config/opencode/secrets/sapphire_bot_test_secret.txt";
 
+    /// <summary>
+    /// Pad naar het bestand met de opgeslagen verbindingen (buiten de repo, chmod 600).
+    /// Het equivalent van XrmToolBox' MscrmTools.ConnectionsList.xml.
+    /// </summary>
+    public string ConnectionsFile { get; set; } = "~/.config/xrmpocket/connections.json";
+
     /// <summary>Standaard aantal rijen dat een query teruggeeft.</summary>
     public int DefaultMaxRows { get; set; } = 200;
 
