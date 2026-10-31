@@ -72,16 +72,48 @@ public sealed record SavedConnection(
     string? Note,
     DateTimeOffset? LastUsedOn);
 
-/// <summary>Resultaat van een verbindingstest (WhoAmI), zoals de statusbalk in XrmToolBox.</summary>
-public sealed record ConnectionTestResult(
-    bool Ok,
-    string? OrganizationName,
-    string? OrganizationUniqueName,
-    string? OrganizationVersion,
-    Guid? UserId,
-    string? ErrorCode,
-    string? Message,
-    string? Hint);
+/// <summary>
+/// Resultaat van een verbindingstest — precies wat XrmToolBox in zijn statusbalk
+/// toont (omgeving, versie, gebruiker), aangevuld met de application user-check:
+/// bestaat er een systemuser voor deze app, is die actief en welke rollen heeft hij?
+/// </summary>
+public sealed class ConnectionTestResult
+{
+    public bool Ok { get; init; }
+
+    public string? OrganizationName { get; init; }
+    public string? OrganizationUniqueName { get; init; }
+    public string? OrganizationVersion { get; init; }
+
+    /// <summary>Id van de gebruiker waarmee verbonden is (WhoAmI).</summary>
+    public Guid? UserId { get; init; }
+
+    public string? UserFullName { get; init; }
+    public string? UserDomainName { get; init; }
+
+    /// <summary>applicationid van de systemuser; hoort de client-ID van de app te zijn.</summary>
+    public string? ApplicationId { get; init; }
+
+    public bool? UserDisabled { get; init; }
+
+    /// <summary>Rollen van de application user (namen).</summary>
+    public IReadOnlyList<string> Roles { get; init; } = Array.Empty<string>();
+
+    /// <summary>Waar als een van de rollen Systeembeheerder is.</summary>
+    public bool IsSystemAdministrator { get; init; }
+
+    public string? ErrorCode { get; init; }
+    public string? Message { get; init; }
+    public string? Hint { get; init; }
+
+    public static ConnectionTestResult Failure(string code, string message, string? hint) => new()
+    {
+        Ok = false,
+        ErrorCode = code,
+        Message = message,
+        Hint = hint
+    };
+}
 
 /// <summary>Body om een verbinding aan te maken of te wijzigen.</summary>
 public sealed class SaveConnectionRequest

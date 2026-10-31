@@ -11,6 +11,7 @@ import {
   type SavedConnection,
 } from './api'
 import { ConnectionManager } from './ConnectionManager'
+import { ConnectionTestSummary } from './ConnectionTestSummary'
 import './App.css'
 
 const SQL_STORAGE_KEY = 'xrmpocket.sql'
@@ -198,14 +199,7 @@ function App() {
             Testen
           </button>
 
-          {test && (
-            <span className={test.ok ? 'test-ok' : 'test-error'}>
-              {test.ok
-                ? `✔ ${test.organizationName ?? 'verbonden'}${test.organizationVersion ? ` (${test.organizationVersion})` : ''}`
-                : `✘ ${test.errorCode}: ${test.message}`}
-              {test.hint && <span className="hint"> {test.hint}</span>}
-            </span>
-          )}
+          {test && <ConnectionTestSummary test={test} />}
 
           {!connection.configured && !test && connection.note && <span className="hint">{connection.note}</span>}
         </div>

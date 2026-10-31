@@ -565,3 +565,22 @@ td.cell-null {
   gap: 10px;
   margin-top: 14px;
 }
+
+/* Pill voor extra status (systeembeheerder, gedeactiveerd) */
+
+.pill {
+  display: inline-block;
+  margin-left: 8px;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  background: #eaf7ee;
+  color: #166534;
+}
+
+.pill.danger {
+  background: #fde8e8;
+  color: #b91c1c;
+}

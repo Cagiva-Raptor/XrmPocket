@@ -11,6 +11,7 @@ import {
   type Highlight,
   type SavedConnection,
 } from './api'
+import { ConnectionTestSummary } from './ConnectionTestSummary'
 
 interface Props {
   open: boolean
@@ -110,6 +111,11 @@ export function ConnectionManager({ open, connections, templates, onClose, onCha
       if (secret.trim() && form.kind === 'dataverse') {
         await saveSecret(saved.id, secret.trim())
         setSecret('')
+
+        // Meteen testen, zoals XrmToolBox na het invullen van een wachtwoord:
+        // zo zie je direct of het secret en de application user kloppen.
+        const testResult = await testConnection(saved.id)
+        setTests((current) => ({ ...current, [saved.id]: testResult }))
       }
 
       setMessage(`'${saved.name}' bewaard.`)
@@ -194,14 +200,7 @@ export function ConnectionManager({ open, connections, templates, onClose, onCha
                         {connection.kind === 'mock' ? 'Synthetische data' : connection.url}
                         {connection.configured ? '' : ` — ${connection.note}`}
                       </p>
-                      {test && (
-                        <p className={test.ok ? 'test-ok' : 'test-error'}>
-                          {test.ok
-                            ? `✔ ${test.organizationName ?? 'verbonden'}${test.organizationVersion ? ` (${test.organizationVersion})` : ''}`
-                            : `✘ ${test.errorCode}: ${test.message}`}
-                          {test.hint && <span className="hint"> {test.hint}</span>}
-                        </p>
-                      )}
+                      {test && <ConnectionTestSummary test={test} compact />}
                     </div>
                   </div>
 

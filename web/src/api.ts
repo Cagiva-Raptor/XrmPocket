@@ -36,6 +36,12 @@ export interface ConnectionTestResult {
   organizationUniqueName: string | null
   organizationVersion: string | null
   userId: string | null
+  userFullName: string | null
+  userDomainName: string | null
+  applicationId: string | null
+  userDisabled: boolean | null
+  roles: string[]
+  isSystemAdministrator: boolean
   errorCode: string | null
   message: string | null
   hint: string | null

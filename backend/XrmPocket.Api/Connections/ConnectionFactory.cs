@@ -5,6 +5,7 @@ using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Extensions.Options;
 using Microsoft.PowerPlatform.Dataverse.Client;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Query;
 using XrmPocket.Api.Configuration;
 using XrmPocket.Api.Mock;
 
@@ -74,30 +75,39 @@ public sealed class ConnectionFactory
     public void Invalidate(string connectionId) => _cache.TryRemove(connectionId, out _);
 
     /// <summary>
-    /// Verbindingstest met WhoAmI — precies wat XrmToolBox in zijn statusbalk toont:
-    /// omgeving, versie en de gebruiker waarmee je verbonden bent.
+    /// Verbindingstest met WhoAmI + application user-check — precies wat XrmToolBox in
+    /// zijn statusbalk toont, aangevuld met de vraag of de app in deze omgeving een
+    /// systemuser met rollen heeft.
     /// </summary>
     public ConnectionTestResult Test(ConnectionProfile profile)
     {
         if (profile.IsMock)
         {
-            return new ConnectionTestResult(
-                true,
-                "Mock (synthetische data)",
-                "mock",
-                typeof(Sql4CdsConnection).Assembly.GetName().Version?.ToString(),
-                null,
-                null,
-                "Geen Dataverse-verbinding: alle rijen komen uit de mock-dataset.",
-                null);
+            // Ook de mock levert een (duidelijk synthetische) gebruiker + rollen, zodat
+            // de statusbalk en de rollenweergave testbaar zijn zonder Dataverse.
+            return new ConnectionTestResult
+            {
+                Ok = true,
+                OrganizationName = "Mock (synthetische data)",
+                OrganizationUniqueName = "mock",
+                OrganizationVersion = typeof(Sql4CdsConnection).Assembly.GetName().Version?.ToString(),
+                UserId = MockUserId,
+                UserFullName = "Mock-gebruiker",
+                UserDomainName = "mock@xrmpocket.local",
+                ApplicationId = profile.ClientId ?? "mock-app-id",
+                UserDisabled = false,
+                Roles = new[] { "Systeembeheerder (mock)", "Salesperson (mock)" },
+                IsSystemAdministrator = true,
+                Message = "Geen Dataverse-verbinding: gebruiker en rollen zijn verzonnen."
+            };
         }
 
         var note = DescribeMissingConfiguration(profile);
 
         if (note != null)
         {
-            return new ConnectionTestResult(false, null, null, null, null, "connection_not_configured", note,
-                "Maak een client secret aan (knop 'Secret instellen') en geef de app een application user in Dataverse.");
+            return ConnectionTestResult.Failure("connection_not_configured", note,
+                "Stel een client secret in (knop 'Secret instellen') en geef de app een application user in Dataverse.");
         }
 
         try
@@ -106,32 +116,32 @@ public sealed class ConnectionFactory
 
             if (!client.IsReady)
             {
-                return new ConnectionTestResult(false, null, null, null, null, "connect_failed",
+                return ConnectionTestResult.Failure("connect_failed",
                     client.LastError ?? "Verbinding niet gereed.", MapHint(client.LastError));
             }
 
             var whoAmI = (WhoAmIResponse)client.Execute(new WhoAmIRequest());
-            string? version = null;
+            var version = TryGetVersion(client);
+            var user = DescribeUser(client, profile, whoAmI.UserId, out var userNote);
 
-            try
+            return new ConnectionTestResult
             {
-                var versionResponse = (RetrieveVersionResponse)client.Execute(new RetrieveVersionRequest());
-                version = versionResponse.Results.TryGetValue("Version", out var value) ? value?.ToString() : null;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Versie ophalen mislukt voor verbinding {Connection}", profile.Name);
-            }
-
-            return new ConnectionTestResult(
-                true,
-                client.ConnectedOrgFriendlyName,
-                client.ConnectedOrgUniqueName,
-                version,
-                whoAmI.UserId,
-                null,
-                null,
-                null);
+                Ok = true,
+                OrganizationName = client.ConnectedOrgFriendlyName,
+                OrganizationUniqueName = client.ConnectedOrgUniqueName,
+                OrganizationVersion = version,
+                UserId = whoAmI.UserId,
+                UserFullName = user?.FullName,
+                UserDomainName = user?.DomainName,
+                ApplicationId = user?.ApplicationId,
+                UserDisabled = user?.Disabled,
+                Roles = user?.Roles ?? Array.Empty<string>(),
+                IsSystemAdministrator = user?.IsSystemAdministrator ?? false,
+                Message = userNote,
+                Hint = user?.Disabled == true
+                    ? "De application user is gedeactiveerd; activeer hem in Dataverse voordat je queries draait."
+                    : null
+            };
         }
         catch (Exception ex)
         {
@@ -144,8 +154,89 @@ public sealed class ConnectionFactory
                 : message.Contains("403", StringComparison.OrdinalIgnoreCase) ? "no_application_user"
                 : "connect_failed";
 
-            return new ConnectionTestResult(false, null, null, null, null, code, message.Trim(), MapHint(message));
+            return ConnectionTestResult.Failure(code, message.Trim(), MapHint(message));
         }
+    }
+
+    private static string? TryGetVersion(ServiceClient client)
+    {
+        try
+        {
+            var response = (RetrieveVersionResponse)client.Execute(new RetrieveVersionRequest());
+            return response.Results.TryGetValue("Version", out var value) ? value?.ToString() : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Leest de systemuser achter de app-only verbinding: bestaat hij, is hij actief,
+    /// hoort zijn applicationid bij deze app en welke rollen heeft hij? Dit is de
+    /// "application user"-controle die je in Dataverse anders met de hand doet.
+    /// </summary>
+    private UserDescription? DescribeUser(ServiceClient client, ConnectionProfile profile, Guid userId, out string? note)
+    {
+        note = null;
+
+        try
+        {
+            var entity = client.Retrieve("systemuser", userId,
+                new ColumnSet("fullname", "domainname", "isdisabled", "applicationid", "isintegrationuser"));
+
+            var applicationId = entity.GetAttributeValue<Guid?>("applicationid");
+            var disabled = entity.GetAttributeValue<bool?>("isdisabled") ?? false;
+            var roles = RetrieveRoles(client, userId, out var isSystemAdministrator);
+
+            if (applicationId != null && !string.IsNullOrEmpty(profile.ClientId) &&
+                !string.Equals(applicationId.Value.ToString(), profile.ClientId, StringComparison.OrdinalIgnoreCase))
+            {
+                note = $"Let op: deze gebruiker hoort bij app {applicationId}, niet bij client-ID {profile.ClientId}.";
+            }
+            else if (roles.Count == 0)
+            {
+                note = "De application user heeft geen beveiligingsrollen; query's kunnen op rechten stuklopen.";
+            }
+
+            return new UserDescription(
+                entity.GetAttributeValue<string>("fullname"),
+                entity.GetAttributeValue<string>("domainname"),
+                applicationId?.ToString(),
+                disabled,
+                roles,
+                isSystemAdministrator);
+        }
+        catch (Exception ex)
+        {
+            // Geen leesrecht op systemuser/role is geen verbindingsfout: de app werkt,
+            // maar we kunnen de gebruiker niet beschrijven.
+            _logger.LogDebug(ex, "Application user-info ophalen mislukt voor {Connection}", profile.Name);
+            note = "Kon de application user niet uitlezen (geen leesrecht op systemuser/role).";
+            return null;
+        }
+    }
+
+    private static IReadOnlyList<string> RetrieveRoles(ServiceClient client, Guid userId, out bool isSystemAdministrator)
+    {
+        // Zelfde aanpak als de engine gebruikt: role + link naar systemuserroles.
+        var query = new QueryExpression("role")
+        {
+            ColumnSet = new ColumnSet("name", "roletemplateid")
+        };
+
+        var link = query.AddLink("systemuserroles", "roleid", "roleid");
+        link.LinkCriteria.AddCondition("systemuserid", ConditionOperator.Equal, userId);
+
+        var roles = client.RetrieveMultiple(query).Entities;
+        isSystemAdministrator = roles.Any(role => role.GetAttributeValue<Guid?>("roletemplateid") == SystemAdministratorTemplateId);
+
+        return roles
+            .Select(role => role.GetAttributeValue<string>("name"))
+            .Where(name => !string.IsNullOrEmpty(name))
+            .Select(name => name!)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     /// <summary>Waarom een verbinding (nog) niet bruikbaar is, of null als ze bruikbaar is.</summary>
@@ -286,7 +377,21 @@ public sealed class ConnectionFactory
         message.Contains("AADSTS7000215", StringComparison.OrdinalIgnoreCase) ||
         message.Contains("AADSTS7000222", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Vaste, verzonnen gebruiker-id voor de mock-verbinding.</summary>
+    private static readonly Guid MockUserId = new("00000000-0000-0000-0000-000000000c04");
+
+    /// <summary>Vaste GUID van de rol "Systeembeheerder" in Dataverse.</summary>
+    private static readonly Guid SystemAdministratorTemplateId = new("627090FF-40A3-4053-8790-584EDC5BE201");
+
     private sealed record CacheEntry(string Fingerprint, Lazy<ServiceClient> Client);
+
+    private sealed record UserDescription(
+        string? FullName,
+        string? DomainName,
+        string? ApplicationId,
+        bool Disabled,
+        IReadOnlyList<string> Roles,
+        bool IsSystemAdministrator);
 }
 
 /// <summary>De verbinding is nog niet bruikbaar; de melding zegt wat er ontbreekt.</summary>
