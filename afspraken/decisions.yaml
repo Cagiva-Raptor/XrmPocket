@@ -146,8 +146,9 @@ notes:
     decision: "Verbindingen volgen het model van XrmToolBox: een lijst met opgeslagen
       verbindingen (ConnectionProfile met id, naam, soort, authType, omgeving, URL,
       client-ID, tenant, time-out, kleurmarkering en laatst gebruikt), één
-      standaardverbinding, een test per verbinding (WhoAmI) en een eigen secret per
-      verbinding. De lijst staat in ~/.config/xrmpocket/connections.json (chmod 600,
+      standaardverbinding, een test per verbinding (WhoAmI plus application
+      user-check: systemuser, gedeactiveerd?, applicationid, rollen en of een van die
+      rollen Systeembeheerder is) en een eigen secret per verbinding. De lijst staat in ~/.config/xrmpocket/connections.json (chmod 600,
       buiten de repo). Het client secret staat NIET in dat bestand: het profiel bevat
       enkel het pad naar een bestand met chmod 600; een nieuw secret gaat via
       POST /api/connections/{id}/secret en wordt nooit teruggegeven of gelogd.
