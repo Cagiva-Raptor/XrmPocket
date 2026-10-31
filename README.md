@@ -14,8 +14,9 @@ Carrington, die **inprocess** in de backend draait. Naamsvermelding:
   ([verslag](docs/spike-2026-10-30-sql-naar-fetchxml.md)), repo-structuur staat.
 - **Fase 2/3 in opbouw**: SQL → FetchXML → resultaatgrid werkt volledig tegen een
   **synthetische mock-omgeving**, met een **verbindingsbeheer zoals XrmToolBox**
-  (lijst, standaardverbinding, test, eigen secret per verbinding) — zie
-  [`docs/verbindingen.md`](docs/verbindingen.md). De Dataverse-route (app-only) is
+  (lijst, standaardverbinding, test, eigen secret per verbinding) en een
+  **application user-check** (bestaat de systemuser, is hij actief, welke rollen?) —
+  zie [`docs/verbindingen.md`](docs/verbindingen.md). De Dataverse-route (app-only) is
   geïmplementeerd: de verbindingstest komt tot bij Microsoft, maar slagen kan pas met
   een geldig client secret en een application user in SAV-TEST
   (zie [`START.md`](START.md) §4).

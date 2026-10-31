@@ -71,6 +71,32 @@ bewust afwijkt.
 | Key Vault | optie | niet (kan later: dan leest de backend het secret daar) | nu te veel voor de eerste versie |
 | Verbinding per tab | ja | nee, één actieve verbinding per browser | web-UI heeft geen tabs met aparte sessies; per query kiezen dekt het gebruik |
 
+## Application user-check (wie ben ik echt?)
+
+XrmToolBox toont in zijn statusbalk de omgeving en de gebruiker. Omdat wij app-only
+werken, is de "gebruiker" de **applicatiegebruiker** in Dataverse; die moet bestaan,
+actief zijn en rollen hebben. `POST /api/connections/{id}/test` doet daarom na de
+WhoAmI nog drie dingen:
+
+1. **`systemuser` ophalen** voor de WhoAmI-gebruiker: `fullname`, `domainname`,
+   `isdisabled`, `applicationid`.
+2. **Rollen ophalen** via `role` met een link naar `systemuserroles`
+   (dezelfde query die de engine zelf gebruikt), inclusief de controle op de vaste
+   `roletemplateid` van *Systeembeheerder* (`627090FF-40A3-4053-8790-584EDC5BE201`).
+3. **Vergelijken**: hoort het `applicationid` bij het client-ID van deze verbinding, is
+   de gebruiker gedeactiveerd, en heeft hij rollen? Zo niet, dan zegt de melding wat er
+   mist — vóór je een query draait.
+
+De statusbalk toont daarna bijvoorbeeld:
+
+```
+✔ Operations SAV Test [operations-sav-test] (9.2.…) · Sapphire AI Bot (a52e…) · 3 rollen
+  [systeembeheerder]
+```
+
+De mock-verbinding levert een duidelijk verzonnen gebruiker + rollen, zodat de
+weergave testbaar is zonder Dataverse.
+
 ## API
 
 | Endpoint | Doel |
@@ -79,7 +105,7 @@ bewust afwijkt.
 | `POST /api/connections` | verbinding aanmaken of wijzigen |
 | `DELETE /api/connections/{id}` | verwijderen |
 | `POST /api/connections/{id}/default` | standaardverbinding kiezen |
-| `POST /api/connections/{id}/test` | WhoAmI-test (omgeving, versie, gebruiker) |
+| `POST /api/connections/{id}/test` | WhoAmI + application user-check (omgeving, versie, gebruiker, rollen) |
 | `POST /api/connections/{id}/secret` | client secret bewaren (chmod 600) |
 | `GET /api/environments` | sjablonen (dev/test/acc/productie) om snel een verbinding te maken |
 | `POST /api/query` | SQL uitvoeren; `connectionId` leeg = standaardverbinding |

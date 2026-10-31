@@ -69,7 +69,7 @@ staan in [`verbindingen.md`](verbindingen.md).
 | `POST /api/connections` | aanmaken of wijzigen (naam, soort, omgeving, URL, client-ID, tenant, time-out, highlight) |
 | `DELETE /api/connections/{id}` | verwijderen |
 | `POST /api/connections/{id}/default` | standaardverbinding kiezen |
-| `POST /api/connections/{id}/test` | WhoAmI-test: omgeving, versie, gebruikers-id, of een foutcode met hint |
+| `POST /api/connections/{id}/test` | WhoAmI + application user-check: omgeving, versie, gebruiker, rollen, of een foutcode met hint |
 | `POST /api/connections/{id}/secret` | client secret bewaren (chmod 600); de waarde komt nooit terug |
 | `GET /api/environments` | sjablonen (dev/test/acc/productie) voor nieuwe verbindingen |
 
