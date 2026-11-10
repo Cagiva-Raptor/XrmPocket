@@ -212,3 +212,30 @@ notes:
       - docs/verbindingen.md
       - CONTEXT.md
     status: active
+  - id: 2026-11-10-overdracht-via-docs
+    date: 2026-11-10
+    title: "Overdracht naar een andere OpenCode-instance loopt via de repo, niet via de sessie"
+    decision: "Een overdracht naar een andere OpenCode-instance (ook met een lokaal
+      model) gebeurt via de repository: HANDOVER.md bevat het volledige overzicht
+      (status, architectuur, afspraken, machineopzet, verificatiecommando's,
+      valkuilen, checklist), docs/digest-xrmpocket.md is de 1-pagina-versie voor een
+      kleine context, en afspraken/decisions.yaml blijft de bron van waarheid voor de
+      beslissingen. De gespreksgeschiedenis wordt niet overgedragen. Handhaving: na
+      elke inhoudelijke wijziging blijven HANDOVER.md, docs/digest-xrmpocket.md,
+      CONTEXT.md en decisions.yaml in dezelfde commit synchroon; secrets, tokens en
+      privésleutels gaan nooit mee via chat of repo maar worden op de nieuwe machine
+      opnieuw ingesteld (of via scp gekopieerd); de nieuwe instance leest eerst
+      HANDOVER.md en de digest voordat ze code aanraakt."
+    rationale: "De gebruiker wil deze sessie voortzetten op een andere instance met een
+      lokaal model. Een sessie zelf is niet overdraagbaar, en een lokaal model heeft
+      minder context: daarom een expliciet overdrachtsdocument plus een compacte
+      digest, zodat de nieuwe instance zonder de hele repo te lezen verder kan. De
+      afspraken (secrets, alleen lezen, poorten, kleine commits) gelden daar
+      onverkort, en de checklist voorkomt dat een verse machine als 'kapot' wordt
+      ervaren terwijl alleen de secrets nog ontbreken."
+    files:
+      - HANDOVER.md
+      - docs/digest-xrmpocket.md
+      - README.md
+      - CONTEXT.md
+    status: active
