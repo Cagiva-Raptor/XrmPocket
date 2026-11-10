@@ -1,6 +1,6 @@
 # xrmpocket — projectoverzicht (om mee te nemen)
 
-Laatst bijgewerkt: 2026-10-31. Lees dit bij de start van elke xrmpocket-sessie.
+Laatst bijgewerkt: 2026-11-10. Lees dit bij de start van elke xrmpocket-sessie.
 
 ## Omgeving
 
@@ -62,6 +62,10 @@ Bij context (gecheckt die dag, geen veronderstellingen):
     secret per verbinding dat **buiten** het profiel staat
   - Dataverse-route via `ServiceClient` (app-only): de test komt tot bij Microsoft
     (`AADSTS7000215` bij een nep-secret), slagen wacht op de blokkers hieronder
+- **Overdracht (2026-11-10)**: `HANDOVER.md` (volledig) + `docs/digest-xrmpocket.md`
+  (1 pagina) beschrijven status, afspraken, machineopzet en valkuilen, zodat een andere
+  OpenCode-instance (ook met een lokaal model) dit project kan overnemen. De
+  gespreksgeschiedenis wordt niet overgedragen; de repo is de overdracht.
 - **Toolchain**: .NET 10.0.403 (`brew install dotnet`,
   `export DOTNET_ROOT="/opt/homebrew/opt/dotnet/libexec"`), Node 26, npm 11
 - **SSH deploy key** klaar: `~/.ssh/gh-xrmtoolbox-ios-deploy` (ed25519, geen

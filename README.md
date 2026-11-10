@@ -8,6 +8,11 @@ MIT-gelicenseerde [SQL 4 CDS-engine](https://github.com/MarkMpn/Sql4Cds) van Mar
 Carrington, die **inprocess** in de backend draait. Naamsvermelding:
 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
 
+> **Neem je dit project over op een andere machine of met een ander (lokaal) model?
+> Begin bij [`HANDOVER.md`](HANDOVER.md)** — daar staat de volledige overdracht,
+> inclusief werkafspraken en een checklist. Voor kleine context:
+> [`docs/digest-xrmpocket.md`](docs/digest-xrmpocket.md).
+
 ## Status
 
 - **Fase 0 klaar**: stack gekozen, engine-spike geslaagd
