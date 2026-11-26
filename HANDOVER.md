@@ -163,19 +163,21 @@ app-only blijven gebruiken.
 ### 7.2 Repo + SSH (push-toegang)
 
 De remote gebruikt een **host-alias** met een eigen deploy key (niet je persoonlijke
-sleutel). Op de nieuwe machine:
+sleutel). **Maak per machine een nieuwe sleutel** en zet de publieke sleutel als
+*Deploy key* (met write access) in de GitHub-repo — kopieer nooit de privésleutel van
+de andere machine.
 
 ```bash
-# 1. sleutel plaatsen (voorbeeld: kopieer van de oude machine, of maak een nieuwe
-#    en zet de publieke sleutel als deploy key in de GitHub-repo)
-install -m 600 ~/.ssh/gh-xrmtoolbox-ios-deploy ~/.ssh/gh-xrmtoolbox-ios-deploy
+# 1. nieuwe sleutel + publieke sleutel tonen (plak die in GitHub > Settings > Deploy keys)
+ssh-keygen -t ed25519 -C "xrmpocket-<machine>" -f ~/.ssh/gh-xrmpocket-<machine> -N ""
+cat ~/.ssh/gh-xrmpocket-<machine>.pub
 
 # 2. host-alias in ~/.ssh/config
 cat >> ~/.ssh/config <<'EOF'
 Host github.com-xrmpocket
   HostName github.com
   User git
-  IdentityFile ~/.ssh/gh-xrmtoolbox-ios-deploy
+  IdentityFile ~/.ssh/gh-xrmpocket-<machine>
   IdentitiesOnly yes
 EOF
 
@@ -233,9 +235,105 @@ secret). De mock-queries hierboven werken dus direct.
 | `~/.config/opencode/secrets/sapphire_bot_test_secret.txt` | secret | op de nieuwe machine opnieuw instellen (portal) of via `scp` kopiëren |
 | `~/.config/xrmpocket/connections.json` | bevat paden/URL's (geen secret) | automatisch aangemaakt; of kopiëren als je dezelfde lijst wilt |
 | `~/.config/xrmpocket/tokens/*.json` | refresh tokens | **niet** kopiëren; opnieuw aanmelden |
-| `~/.ssh/gh-xrmtoolbox-ios-deploy` | privésleutel | via `scp`/keychain, nooit via chat |
+| SSH-deploykey | privésleutel | **nieuwe sleutel per machine** maken en de publieke sleutel in GitHub zetten (zie §7.2); nooit de privésleutel kopiëren of via chat sturen |
 
-### 7.6 Sauron (alleen als die machine Sauron heeft)
+### 7.6 Savaco-laptop (Windows 11, PowerShell)
+
+De app is platformonafhankelijk: ASP.NET Core + Node, geen Unix-specifieke API's
+(`File.SetUnixFileMode` wordt op Windows overgeslagen). Deze stappen zijn voor een
+**verse Windows-machine**; de laptop heeft een **eigen afspraken-repo** (zie §6, regel
+over gescheiden werelden) — voeg XrmPocket-beslissingen dus **niet** daar toe, ze leven
+in `afspraken/decisions.yaml` van deze projectrepo.
+
+**a. Voorwaarden installeren**
+
+```powershell
+winget install --id Git.Git -e --source winget
+winget install --id Microsoft.DotNet.SDK.10 -e --source winget
+winget install --id OpenJS.NodeJS -e --source winget
+# controleer (nieuw PowerShell-venster):
+dotnet --version    # 10.x
+node --version      # 22 of nieuwer (op de Mac: 26)
+npm --version
+```
+
+**b. Repo clonen met een eigen deploy key**
+
+```powershell
+ssh-keygen -t ed25519 -C "xrmpocket-laptop" -f "$env:USERPROFILE\.ssh\gh-xrmpocket-laptop" -N '""'
+Get-Content "$env:USERPROFILE\.ssh\gh-xrmpocket-laptop.pub"
+#   -> GitHub > repo XrmPocket > Settings > Deploy keys > Add deploy key
+#      (vink "Allow write access" aan)
+
+Add-Content "$env:USERPROFILE\.ssh\config" @"
+Host github.com-xrmpocket
+  HostName github.com
+  User git
+  IdentityFile ~/.ssh/gh-xrmpocket-laptop
+  IdentitiesOnly yes
+"@
+
+git clone git@github.com-xrmpocket:Cagiva-Raptor/XrmPocket.git xrmpocket
+```
+
+**c. Bouwen en starten**
+
+```powershell
+cd xrmpocketackend\XrmPocket.Api
+dotnet build
+dotnet run                     # http://localhost:4108 (luistert op 0.0.0.0)
+
+cd ..\..\web
+npm install
+npm run build                  # -> backend\XrmPocket.Api\wwwroot
+npm run dev                    # optioneel: http://localhost:5173
+```
+
+**d. Verifiëren**
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:4108/api/health
+Invoke-RestMethod http://127.0.0.1:4108/api/connections
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:4108/api/query `
+  -ContentType 'application/json' `
+  -Body '{"sql":"SELECT name, revenue FROM account ORDER BY revenue DESC"}'
+```
+
+**e. Secret instellen (zonder het in de history te zetten)**
+
+```powershell
+$dir = "$env:USERPROFILE\.config\opencode\secrets"
+New-Item -ItemType Directory -Force -Path $dir | Out-Null
+$secure = Read-Host -AsSecureString "Client secret"
+$plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+           [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+[IO.File]::WriteAllText("$dir\sapphire_bot_test_secret.txt", $plain)
+Remove-Variable plain, secure
+```
+
+`%USERPROFILE%` is op Windows al per gebruiker afgeschermd (ACL), dus de bestanden
+erven veilige rechten. Wil je het expliciet: `icacls` op dat ene bestand met
+`/inheritance:r /grant:r "$env:USERNAME:F"` — niet op de hele map (dat breekt backups).
+
+**f. Vanaf de iPhone naar de laptop**
+
+```powershell
+# eenmalig, verhoogd PowerShell-venster:
+New-NetFirewallRule -DisplayName "XrmPocket 4108" -Direction Inbound `
+  -LocalPort 4108 -Protocol TCP -Action Allow -Profile Private
+```
+
+Gebruik daarna `http://<laptop-ip>:4108`. PWA-installatie en interactief aanmelden
+vereisen HTTPS (zie §5 en `docs/verbindingen.md`); voor de rest volstaat http.
+
+**g. Let op**
+
+- Poort vrij? `Get-NetTCPConnection -LocalPort 4108 -ErrorAction SilentlyContinue`
+- Regelafsluitingen: `.gitattributes` zet alles op **LF**; niet handmatig omzetten.
+- De laptop heeft géén `~/.config/xrmpocket/connections.json` nodig: dat wordt bij de
+  eerste start aangemaakt (mock + SAV-TEST).
+
+### 7.7 Sauron (alleen als die machine Sauron heeft)
 
 Nieuw project toevoegen in `bridge/projects.json` met **de volgende vrije poort**,
 sessietitel `Sauron - XrmPocket`, en de brug herstarten. De app zelf blijft op 4108.
@@ -282,10 +380,13 @@ sessietitel `Sauron - XrmPocket`, en de brug herstarten. De app zelf blijft op 4
 - [ ] schrijfquery geweigerd (`write_not_allowed`)
 - [ ] afspraken in §6 overgenomen (zeker: geen secrets, kleine commits, alleen lezen)
 - [ ] bij twijfel: vraag de gebruiker in plaats van te gokken
+- [ ] Windows-laptop: `dotnet --version` = 10.x, `node --version` ≥ 22, poort 4108 vrij
+- [ ] Windows-laptop: eigen deploy key in GitHub (geen privésleutel gekopieerd)
+- [ ] Windows-laptop: laptop-afsprakenrepo **niet** gemengd met dit project
 
 ## 11. Waar de beslissingen staan
 
-`afspraken/decisions.yaml` (9 notities):
+`afspraken/decisions.yaml` (10 notities):
 
 | Id | Onderwerp | Status |
 |---|---|---|
@@ -298,6 +399,7 @@ sessietitel `Sauron - XrmPocket`, en de brug herstarten. De app zelf blijft op 4
 | `2026-10-31-verbindingen-zoals-xrmtoolbox` | verbindingsmodel, secrets buiten profiel | active (amended) |
 | `2026-11-01-interactieve-login-als-tweede-authvorm` | eigen account naast app-only | active |
 | `2026-11-10-overdracht-via-docs` | overdracht via HANDOVER + digest, niet via de sessie | active |
+| `2026-11-26-windows-laptop-als-tweede-ontwikkelmachine` | Windows-laptop: eigen deploy key, LF, gescheiden afspraken | active |
 
 ## 12. Contactpunten / bronnen
 

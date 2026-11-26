@@ -28,6 +28,8 @@ cd web && npm run build                                  # → backend/.../wwwro
 ```
 
 macOS: `export DOTNET_ROOT="/opt/homebrew/opt/dotnet/libexec"`.
+Windows (Savaco-laptop): `winget install Microsoft.DotNet.SDK.10`, dan
+`cd backend\XrmPocket.Api; dotnet run` — volledige stappen in `HANDOVER.md` §7.6.
 
 ## Verifiëren
 

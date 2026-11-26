@@ -1,0 +1,13 @@
+# Uniforme regelafsluitingen: het project is op macOS/Linux ontstaan en moet op
+# Windows dezelfde LF-bestanden houden (geen CRLF-churn in commits).
+* text=auto eol=lf
+
+# Binaire bestanden nooit omzetten.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary

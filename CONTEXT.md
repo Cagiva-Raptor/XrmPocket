@@ -66,6 +66,11 @@ Bij context (gecheckt die dag, geen veronderstellingen):
   (1 pagina) beschrijven status, afspraken, machineopzet en valkuilen, zodat een andere
   OpenCode-instance (ook met een lokaal model) dit project kan overnemen. De
   gespreksgeschiedenis wordt niet overgedragen; de repo is de overdracht.
+- **Tweede ontwikkelmachine (2026-11-26)**: de **Savaco-laptop (Windows 11)** kan het
+  project draaien (`HANDOVER.md` §7.6): .NET 10 + Node via winget, eigen deploy key,
+  `.gitattributes` houdt alles op LF. De laptop heeft een **eigen afspraken-repo**;
+  nooit mergen met de gedeelde repo — projectbeslissingen blijven in
+  `afspraken/decisions.yaml` van deze repo.
 - **Toolchain**: .NET 10.0.403 (`brew install dotnet`,
   `export DOTNET_ROOT="/opt/homebrew/opt/dotnet/libexec"`), Node 26, npm 11
 - **SSH deploy key** klaar: `~/.ssh/gh-xrmtoolbox-ios-deploy` (ed25519, geen
