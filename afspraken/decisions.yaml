@@ -239,3 +239,33 @@ notes:
       - README.md
       - CONTEXT.md
     status: active
+  - id: 2026-11-26-windows-laptop-als-tweede-ontwikkelmachine
+    date: 2026-11-26
+    title: "Savaco-laptop (Windows 11) is een tweede ontwikkelmachine; eigen deploy key, LF, gescheiden afspraken"
+    decision: "XrmPocket moet op de Savaco-laptop (Windows 11, PowerShell) bouwen en
+      draaien: .NET 10 SDK en Node >= 22 via winget, `dotnet run` op poort 4108,
+      `npm run build` naar backend/XrmPocket.Api/wwwroot. Elke machine krijgt een
+      EIGEN SSH-deploykey (publieke sleutel als deploy key met write access in de
+      GitHub-repo); privésleutels worden nooit gekopieerd of via chat verstuurd. Een
+      .gitattributes zet alle tekstbestanden op LF zodat Windows geen CRLF-churn
+      veroorzaakt. Secrets staan ook op Windows onder %USERPROFILE%\\.config\\
+      (profiel-ACL volstaat; geen icacls op hele mappen). De laptop heeft sinds
+      2026-11-26 een EIGEN afspraken-repo: nooit syncen of mergen met de gedeelde
+      repo, en XrmPocket-beslissingen leven in afspraken/decisions.yaml van deze
+      projectrepo. Handhaving: geen secrets/tokens in de repo of chat; geen
+      privésleutel kopiëren; geen CRLF-commits; geen vermenging van de twee
+      afspraken-werelden."
+    rationale: "De gebruiker wil deze sessie op de Savaco-laptop met een lokaal model
+      voortzetten. De app is platformonafhankelijk (ASP.NET Core + Node, geen
+      Unix-specifieke API's in de bron), dus Windows is een haalbare tweede
+      ontwikkelmachine. Een eigen deploy key per machine beperkt de schade bij verlies
+      en houdt de Mac-sleutel buiten beeld; LF voorkomt dat elke Windows-commit
+      schijnbaar het hele bestand wijzigt. De scheiding van de afspraken-repo's volgt
+      de bestaande beslissing 2026-11-26-afspraken-laptop-eigen-repo: dit project
+      brengt zijn eigen beslissingen mee en heeft de gedeelde repo niet nodig."
+    files:
+      - HANDOVER.md
+      - .gitattributes
+      - docs/digest-xrmpocket.md
+      - CONTEXT.md
+    status: active
