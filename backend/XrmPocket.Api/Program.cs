@@ -222,14 +222,23 @@ app.MapPost("/api/query", async (QueryRequest request, QueryService service, Can
 
 app.MapToolsEndpoints();
 
-app.MapGet("/api/statements", (StatementStore store) => Results.Ok(new { statements = store.List() }));
+app.MapGet("/api/statements", (StatementStore store, string? kind) => Results.Ok(new { statements = store.List(kind ?? "sql") }));
 
 app.MapPost("/api/statements", (SaveStatementRequest request, StatementStore store) =>
 {
     if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Sql))
         return Results.BadRequest(new { error = "Geef een naam en een statement op." });
 
-    return Results.Ok(store.Save(request.Name, request.Sql));
+    var kind = request.Kind == "fetchxml" ? "fetchxml" : "sql";
+    return Results.Ok(store.Save(request.Name, request.Sql, kind));
+});
+
+app.MapPut("/api/statements/{id}", (string id, SaveStatementRequest request, StatementStore store) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Sql))
+        return Results.BadRequest(new { error = "Geef een statement op." });
+    var updated = store.Update(id, request.Sql);
+    return updated is null ? Results.NotFound(new { error = "Statement niet gevonden." }) : Results.Ok(updated);
 });
 
 app.MapDelete("/api/statements/{id}", (string id, StatementStore store) =>

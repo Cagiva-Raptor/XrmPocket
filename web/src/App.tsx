@@ -9,6 +9,7 @@ import {
   logout,
   runQuery,
   saveStatement,
+  updateStatement,
   type SavedStatement,
   testConnection,
   type ConnectionTestResult,
@@ -21,12 +22,16 @@ import { Tools, TOOL_TABS, type ToolId } from './Tools'
 import { LoginScreen } from './Login'
 import { ConnectionManager } from './ConnectionManager'
 import { ConnectionTestSummary } from './ConnectionTestSummary'
+import { loadGlobalSettings, saveGlobalSettings, type GlobalSettings } from './settings'
+import { formatIdList } from './idList'
 import './App.css'
 
 const SQL_STORAGE_KEY = 'xrmpocket.sql'
 const CONNECTION_STORAGE_KEY = 'xrmpocket.connection'
 const HIDE_DEMO_STORAGE_KEY = 'xrmpocket.hideDemo'
 const VIM_STORAGE_KEY = 'xrmpocket.vim'
+const THEME_STORAGE_KEY = 'xrmpocket.theme'
+const VIEW_STORAGE_KEY = 'xrmpocket.view'
 const SHOW_EXAMPLES_KEY = 'xrmpocket.showExamples'
 
 const EXAMPLES: { label: string; sql: string }[] = [
@@ -56,18 +61,47 @@ function App() {
   const [notice, setNotice] = useState<string | null>(null)
   const [managerOpen, setManagerOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [view, setView] = useState<'sql' | ToolId>('sql')
+  const [toolSettingsOpen, setToolSettingsOpen] = useState(false)
+  const [xlsOpen, setXlsOpen] = useState(false)
+  const [xlsText, setXlsText] = useState('')
+  const [xlsInvalid, setXlsInvalid] = useState<string[]>([])
+  const [view, setView] = useState<'sql' | ToolId>(() => {
+    const saved = localStorage.getItem(VIEW_STORAGE_KEY)
+    return saved === 'sql' || TOOL_TABS.some((item) => item.id === saved) ? (saved as 'sql' | ToolId) : 'sql'
+  })
+
+  useEffect(() => {
+    localStorage.setItem(VIEW_STORAGE_KEY, view)
+    const label = view === 'sql' ? 'SQL 4 CDS' : TOOL_TABS.find((item) => item.id === view)?.label ?? 'SQL 4 CDS'
+    document.title = `XrmPocket — ${label}`
+  }, [view])
   const [auth, setAuth] = useState<'checking' | 'in' | 'out'>('checking')
   const [passwordConfigured, setPasswordConfigured] = useState(true)
   const [hideDemo, setHideDemo] = useState(() => localStorage.getItem(HIDE_DEMO_STORAGE_KEY) === '1')
   const [test, setTest] = useState<ConnectionTestResult | null>(null)
   const [sql, setSql] = useState(() => localStorage.getItem(SQL_STORAGE_KEY) ?? EXAMPLES[0].sql)
-  const [maxRows, setMaxRows] = useState(200)
+  const [globalSettings, setGlobalSettings] = useState<GlobalSettings>(loadGlobalSettings)
+  const maxRows = globalSettings.maxRows
+
+  function setMaxRows(value: number) {
+    const next = { ...globalSettings, maxRows: value }
+    setGlobalSettings(next)
+    saveGlobalSettings(next)
+  }
   const [response, setResponse] = useState<QueryResponse | null>(null)
   const [loading, setLoading] = useState(false)
+  const [running, setRunning] = useState(false)
+  const runController = useRef<AbortController | null>(null)
   const [fatal, setFatal] = useState<string | null>(null)
   const editorRef = useRef<SqlEditorHandle>(null)
+  const sqlFileRef = useRef<HTMLInputElement>(null)
   const [vimMode, setVimMode] = useState(() => localStorage.getItem(VIM_STORAGE_KEY) === '1')
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => (localStorage.getItem(THEME_STORAGE_KEY) === 'dark' ? 'dark' : 'light'))
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem(THEME_STORAGE_KEY, theme)
+  }, [theme])
   const [statements, setStatements] = useState<SavedStatement[]>([])
   const [selectedStatement, setSelectedStatement] = useState('')
   const [showExamples, setShowExamples] = useState(() => localStorage.getItem(SHOW_EXAMPLES_KEY) !== '0')
@@ -183,17 +217,24 @@ function App() {
   }
 
   async function handleSaveStatement() {
-    const name = window.prompt('Naam voor dit statement')?.trim()
-    if (!name) return
-
+    const selectedSaved = statements.find((item) => item.id === selectedStatement)
     const selected = editorRef.current?.getSelectedText().trim() ?? ''
     const text = selected || sql
 
     try {
-      const saved = await saveStatement(name, text)
+      if (selectedSaved) {
+        if (!window.confirm(`Statement '${selectedSaved.name}' overschrijven?`)) return
+        const saved = await updateStatement(selectedSaved.id, text)
+        setSelectedStatement(saved.id)
+        setNotice(`Statement '${saved.name}' overschreven (versleuteld).`)
+      } else {
+        const name = window.prompt('Naam voor dit statement')?.trim()
+        if (!name) return
+        const saved = await saveStatement(name, text)
+        setSelectedStatement(saved.id)
+        setNotice(`Statement '${name}' opgeslagen (versleuteld).`)
+      }
       await refreshStatements()
-      setSelectedStatement(saved.id)
-      setNotice(`Statement '${name}' opgeslagen (versleuteld).`)
     } catch (err) {
       setFatal(err instanceof Error ? err.message : String(err))
     }
@@ -212,20 +253,30 @@ function App() {
     }
   }
 
+  function stopRun() {
+    runController.current?.abort()
+  }
+
   async function handleRun(dryRun = false) {
     if (loading) return
 
     const selected = editorRef.current?.getSelectedText().trim() ?? ''
     const statement = selected || sql
+    const controller = new AbortController()
 
+    runController.current = controller
+    setRunning(true)
     setLoading(true)
     setFatal(null)
 
     try {
-      setResponse(await runQuery(statement, connectionId || null, maxRows, dryRun))
+      setResponse(await runQuery(statement, connectionId || null, maxRows, dryRun, controller.signal))
     } catch (error) {
-      setFatal(error instanceof Error ? error.message : String(error))
+      if (controller.signal.aborted) setNotice('Uitvoering gestopt.')
+      else setFatal(error instanceof Error ? error.message : String(error))
     } finally {
+      runController.current = null
+      setRunning(false)
       setLoading(false)
     }
   }
@@ -290,10 +341,28 @@ function App() {
 
           <button
             className="ghost icon-button"
+            onClick={() => setTheme((current) => (current === 'dark' ? 'light' : 'dark'))}
+            aria-label={theme === 'dark' ? 'Lichte modus' : 'Donkere modus'}
+            title={theme === 'dark' ? 'Lichte modus' : 'Donkere modus'}
+          >
+            {theme === 'dark' ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" />
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+            )}
+          </button>
+
+          <button
+            className="ghost icon-button"
             onClick={() => setSettingsOpen(true)}
             disabled={loading}
-            aria-label="Instellingen"
-            title="Instellingen"
+            aria-label="Globale instellingen"
+            title="Globale instellingen"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="3" />
@@ -313,20 +382,11 @@ function App() {
           >
             Uitloggen
           </button>
-
-          <button className="ghost" onClick={() => void handleRun(true)} disabled={loading}>
-            Controleren
-          </button>
-
-          <button className="run" onClick={() => void handleRun()} disabled={loading}>
-            {loading ? 'Bezig…' : 'Uitvoeren'}
-            <kbd>⌘↵</kbd>
-          </button>
         </div>
       </header>
 
       {connection && (
-        <div className="statusbar">
+        <div className={`statusbar hl-${connection.highlight}`}>
           <span className={`badge badge-${connection.highlight}`}>{connection.environment}</span>
           <strong>{connection.name}</strong>
           <span className="meta">{connection.kind === 'mock' ? 'synthetische data' : connection.url}</span>
@@ -357,10 +417,32 @@ function App() {
             {item.label}
           </button>
         ))}
+
+        {(view === 'sql' || view === 'fetchxml') && (
+        <button
+          className="ghost icon-button settings-tab"
+          onClick={() => (view === 'sql' ? setSettingsOpen(true) : setToolSettingsOpen(true))}
+          aria-label="Instellingen"
+          title={view === 'sql' ? 'Instellingen SQL' : 'Instellingen van dit gereedschap'}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg>
+        </button>
+        )}
       </nav>
 
       {view !== 'sql' && connection && (
-        <Tools connectionId={connection.id} isMock={connection.kind === 'mock'} tool={view} />
+        <Tools
+          connectionId={connection.id}
+          isMock={connection.kind === 'mock'}
+          orgUrl={connection.url}
+          maxRows={maxRows}
+          tool={view}
+          settingsOpen={toolSettingsOpen}
+          onCloseSettings={() => setToolSettingsOpen(false)}
+        />
       )}
 
       {view === 'sql' && (
@@ -411,28 +493,92 @@ function App() {
               ))}
             </select>
           </label>
-          <button className="ghost small" onClick={() => void handleSaveStatement()} disabled={loading}>
-            Opslaan
-          </button>
-          <button
-            className="ghost small danger"
-            onClick={() => void handleDeleteStatement()}
-            disabled={loading || !selectedStatement}
-          >
-            Verwijderen
-          </button>
+          <div className="icon-group">
+            <input
+              ref={sqlFileRef}
+              type="file"
+              accept=".sql,text/plain"
+              hidden
+              onChange={async (event) => {
+                const file = event.target.files?.[0]
+                if (!file) return
+                const text = await file.text()
+                setSql(text)
+                setSelectedStatement('')
+                setNotice(`SQL-bestand '${file.name}' geladen (${text.split(/\r?\n/).length} regels, ${text.length.toLocaleString('nl-BE')} tekens).`)
+                event.target.value = ''
+                editorRef.current?.focus()
+              }}
+            />
+            <button
+              className="ghost icon-button"
+              onClick={() => sqlFileRef.current?.click()}
+              disabled={loading}
+              aria-label="SQL-bestand openen"
+              title="SQL-bestand openen"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 7v12h18V7M3 7l3-3h5l2 3M8 13h8" />
+              </svg>
+            </button>
+            <button
+              className="ghost icon-button"
+              onClick={() => void handleSaveStatement()}
+              disabled={loading}
+              title="Opslaan"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <path d="M17 21v-8H7v8M7 3v5h8" />
+              </svg>
+            </button>
+            <button
+              className="ghost icon-button danger"
+              onClick={() => void handleDeleteStatement()}
+              disabled={loading || !selectedStatement}
+              aria-label="Verwijderen"
+              title="Verwijderen"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+              </svg>
+            </button>
+          </div>
 
-          <label className="field field-inline">
-            <span>Max. rijen</span>
-            <select value={maxRows} onChange={(event) => setMaxRows(Number(event.target.value))} disabled={loading}>
-              {[50, 200, 500, 1000].map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <span className="hint">⌘/Ctrl + Enter voert de query uit</span>
+
+          <div className="icon-group end">
+            <button className="ghost xls-button" onClick={() => setXlsOpen(true)} title="Excel-ID's omzetten naar SQL">
+              XLS ID 2 SQL
+            </button>
+            <button
+              className="ghost icon-button"
+              onClick={() => void handleRun(true)}
+              disabled={loading}
+              aria-label="Controleren"
+              title="Controleren (dry run)"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                <path d="M9 12l2 2 4-4" />
+              </svg>
+            </button>
+            <button
+              className={running ? 'run icon-button stop' : 'run icon-button'}
+              onClick={() => (running ? stopRun() : void handleRun())}
+              aria-label={running ? 'Stoppen' : 'Uitvoeren'}
+              title={running ? 'Stoppen' : '⌘/Ctrl + Enter'}
+            >
+              {running ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <rect x="5" y="5" width="14" height="14" rx="2" />
+                </svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path d="M7 4v16l13-8z" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
 
         <SqlEditor
@@ -441,7 +587,9 @@ function App() {
           onChange={setSql}
           onRun={() => void handleRun()}
           vimMode={vimMode}
+          dark={theme === 'dark'}
         />
+        <p className="meta editor-stats">{sql.split(/\r?\n/).length} regels · {sql.length.toLocaleString('nl-BE')} tekens</p>
       </section>
 
       <section className="results">
@@ -474,42 +622,43 @@ function App() {
           </div>
         )}
 
-        {response?.ok && response.columns.length > 0 && (
-          <div className="grid-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th className="row-number">#</th>
-                  {response.columns.map((column) => (
-                    <th key={column.name} title={column.type}>
-                      {column.name}
-                      <span className="type">{column.type}</span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {response.rows.map((row, rowIndex) => (
-                  <tr key={rowIndex}>
-                    <td className="row-number">{rowIndex + 1}</td>
-                    {row.map((cell, cellIndex) => (
-                      <td
-                        key={cellIndex}
-                        className={
-                          cell === null ? 'cell-null' : typeof cell === 'number' ? 'cell-number' : undefined
-                        }
-                      >
-                        {formatCell(cell)}
-                      </td>
+        {response?.ok && response.resultSets.map((result, resultIndex) => (
+          <div className="result-set" key={resultIndex}>
+            {response.resultSets.length > 1 && <h3 className="result-label">Resultaat {resultIndex + 1}</h3>}
+            <div className="grid-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th className="row-number">#</th>
+                    {result.columns.map((column) => (
+                      <th key={column.name} title={column.type}>
+                        {column.name}
+                        <span className="type">{column.type}</span>
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {result.rows.map((row, rowIndex) => (
+                    <tr key={rowIndex}>
+                      <td className="row-number">{rowIndex + 1}</td>
+                      {row.map((cell, cellIndex) => (
+                        <td
+                          key={cellIndex}
+                          className={cell === null ? 'cell-null' : typeof cell === 'number' ? 'cell-number' : undefined}
+                        >
+                          {formatCell(cell)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
-        )}
+        ))}
 
-        {response?.ok && response.rows.length === 0 && response.rowsAffected == null && (
+        {response?.ok && response.resultSets.length === 0 && response.rowsAffected == null && (
           <p className="empty">De query gaf geen rijen terug.</p>
         )}
 
@@ -533,6 +682,53 @@ function App() {
         onClose={() => setManagerOpen(false)}
         onChanged={() => void reload()}
       />
+
+      {xlsOpen && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Excel-ID's naar SQL">
+          <div className="modal">
+            <div className="modal-head">
+              <h2>Excel-ID's naar SQL</h2>
+              <button className="ghost small" onClick={() => setXlsOpen(false)}>
+                Sluiten
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="icon-group">
+                <button
+                  className="run"
+                  disabled={!xlsText.trim()}
+                  onClick={() => {
+                    const result = formatIdList(xlsText)
+                    setXlsInvalid(result.invalid)
+                    if (result.invalid.length > 0) return
+                    editorRef.current?.insertText(result.text)
+                    setXlsText('')
+                    setXlsOpen(false)
+                  }}
+                >
+                  Invoegen in SQL
+                </button>
+              </div>
+              <textarea
+                className="sql-editor plain-editor"
+                value={xlsText}
+                onChange={(event) => setXlsText(event.target.value)}
+                onPaste={() => setXlsInvalid([])}
+                placeholder="Plak hier de ID's uit Excel"
+                rows={20}
+                spellCheck={false}
+              />
+              <p className="meta">
+                {formatIdList(xlsText).count} ID's · {xlsText.length.toLocaleString('nl-BE')} tekens
+                {xlsText.length > 200000 ? ' · te lang voor één SQL-query (max. 200.000 tekens)' : ''}
+              </p>
+              {xlsInvalid.length > 0 && (
+                <p className="notice error">Deze waarden zijn geen GUID en zijn overgeslagen: {xlsInvalid.join(', ')}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {settingsOpen && (
         <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Instellingen">
@@ -579,6 +775,17 @@ function App() {
                   }}
                 />
                 <span>Voorbeeldqueries tonen</span>
+              </label>
+
+              <label className="field field-inline">
+                <span>Max. rijen</span>
+                <select value={maxRows} onChange={(event) => setMaxRows(Number(event.target.value))} disabled={loading}>
+                  {[50, 200, 500, 1000].map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
               </label>
             </div>
           </div>

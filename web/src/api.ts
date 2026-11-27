@@ -95,6 +95,7 @@ export interface QueryResponse {
   rows: CellValue[][]
   rowCount: number
   truncated: boolean
+  resultSets: { columns: ResultColumn[]; rows: CellValue[][]; truncated: boolean }[]
   rowsAffected: number | null
   messages: string[]
   fetchXml: string[]
@@ -184,11 +185,13 @@ export function runQuery(
   connectionId: string | null,
   maxRows: number,
   dryRun = false,
+  signal?: AbortSignal,
 ): Promise<QueryResponse> {
   return request<QueryResponse>('/api/query', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ sql, connectionId, maxRows, dryRun }),
+    signal,
   })
 }
 
@@ -294,12 +297,20 @@ export interface SavedStatement {
   createdOn: string
 }
 
-export function listStatements(): Promise<{ statements: SavedStatement[] }> {
-  return request('/api/statements')
+export function listStatements(kind: 'sql' | 'fetchxml' = 'sql'): Promise<{ statements: SavedStatement[] }> {
+  return request(`/api/statements?kind=${kind}`)
 }
 
-export function saveStatement(name: string, sql: string): Promise<SavedStatement> {
-  return jsonPost<SavedStatement>('/api/statements', { name, sql })
+export function saveStatement(name: string, sql: string, kind: 'sql' | 'fetchxml' = 'sql'): Promise<SavedStatement> {
+  return jsonPost<SavedStatement>('/api/statements', { name, sql, kind })
+}
+
+export function updateStatement(id: string, sql: string): Promise<SavedStatement> {
+  return request<SavedStatement>(`/api/statements/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ name: null, sql }),
+  })
 }
 
 export function deleteStatement(id: string): Promise<unknown> {

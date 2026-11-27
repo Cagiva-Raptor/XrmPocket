@@ -33,19 +33,30 @@ public sealed class StatementStore
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 body BLOB NOT NULL,
-                created_on TEXT NOT NULL
+                created_on TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'sql'
             );
             """;
         command.ExecuteNonQuery();
+
+        using var columns = connection.CreateCommand();
+        columns.CommandText = "SELECT COUNT(*) FROM pragma_table_info('statements') WHERE name = 'kind'";
+        if (Convert.ToInt32(columns.ExecuteScalar()) == 0)
+        {
+            using var migrate = connection.CreateCommand();
+            migrate.CommandText = "ALTER TABLE statements ADD COLUMN kind TEXT NOT NULL DEFAULT 'sql'";
+            migrate.ExecuteNonQuery();
+        }
     }
 
-    public IReadOnlyList<StoredStatement> List()
+    public IReadOnlyList<StoredStatement> List(string kind)
     {
         lock (_gate)
         {
             using var connection = Open();
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT id, name, body, created_on FROM statements ORDER BY name COLLATE NOCASE";
+            command.CommandText = "SELECT id, name, body, created_on FROM statements WHERE kind = $kind ORDER BY name COLLATE NOCASE";
+            command.Parameters.AddWithValue("$kind", kind);
 
             var result = new List<StoredStatement>();
             using var reader = command.ExecuteReader();
@@ -63,7 +74,7 @@ public sealed class StatementStore
         }
     }
 
-    public StoredStatement Save(string name, string sql)
+    public StoredStatement Save(string name, string sql, string kind = "sql")
     {
         lock (_gate)
         {
@@ -75,14 +86,36 @@ public sealed class StatementStore
 
             using var connection = Open();
             using var command = connection.CreateCommand();
-            command.CommandText = "INSERT INTO statements (id, name, body, created_on) VALUES ($id, $name, $body, $created)";
+            command.CommandText = "INSERT INTO statements (id, name, body, created_on, kind) VALUES ($id, $name, $body, $created, $kind)";
             command.Parameters.AddWithValue("$id", statement.Id);
             command.Parameters.AddWithValue("$name", statement.Name);
             command.Parameters.AddWithValue("$body", Encrypt(sql));
             command.Parameters.AddWithValue("$created", statement.CreatedOn);
+            command.Parameters.AddWithValue("$kind", kind);
             command.ExecuteNonQuery();
 
             return statement;
+        }
+    }
+
+    public StoredStatement? Update(string id, string sql)
+    {
+        lock (_gate)
+        {
+            using var connection = Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "UPDATE statements SET body = $body WHERE id = $id";
+            command.Parameters.AddWithValue("$id", id);
+            command.Parameters.AddWithValue("$body", Encrypt(sql));
+            if (command.ExecuteNonQuery() == 0)
+                return null;
+
+            using var read = connection.CreateCommand();
+            read.CommandText = "SELECT id, name, body, created_on FROM statements WHERE id = $id";
+            read.Parameters.AddWithValue("$id", id);
+            using var reader = read.ExecuteReader();
+            if (!reader.Read()) return null;
+            return new StoredStatement(reader.GetString(0), reader.GetString(1), Decrypt((byte[])reader["body"]), reader.GetString(3));
         }
     }
 
@@ -148,4 +181,4 @@ public sealed class StatementStore
 
 public sealed record StoredStatement(string Id, string Name, string Sql, string CreatedOn);
 
-public sealed record SaveStatementRequest(string? Name, string? Sql);
+public sealed record SaveStatementRequest(string? Name, string? Sql, string? Kind = null);
