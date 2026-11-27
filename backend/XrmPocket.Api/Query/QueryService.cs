@@ -86,10 +86,11 @@ public sealed class QueryService
 
             using var connection = new Sql4CdsConnection(dataSources);
             using var command = connection.CreateCommand();
-            command.CommandText = sql;
+            command.CommandText = CollationCompatibility.Normalize(sql);
             command.CommandTimeout = profile.TimeoutSeconds;
+            using var cancelRegistration = cancellationToken.Register(() => command.Cancel());
 
-            connection.InfoMessage += (_, args) => messages.Add(args.Message.ToString());
+            connection.InfoMessage += (_, args) => messages.Add(args.Message.Message);
 
             if (request.DryRun)
             {
@@ -110,76 +111,81 @@ public sealed class QueryService
                 };
             }
 
-            if (isWrite)
+            var stopwatch = Stopwatch.StartNew();
+            var fetchXml = new List<string>();
+            var resultSets = new List<QueryResultSet>();
+            var truncated = false;
+            var rowsAffected = 0;
+            var hasRowsAffected = false;
+
+            // Dezelfde uitvoeringsroute als XrmToolbox: ExecuteReader voor het hele
+            // script, inclusief DML, PRINT en meerdere resultaatsets.
+            if (!isWrite)
             {
-                var writeStopwatch = Stopwatch.StartNew();
-                var affected = command.ExecuteNonQuery();
-                writeStopwatch.Stop();
-                _connections.Touch(profile.Id);
-
-                _logger.LogInformation("Schrijfactie op {Connection}: {Affected} rijen", profile.Name, affected);
-
-                return new QueryResponse
-                {
-                    Ok = true,
-                    ConnectionId = profile.Id,
-                    ConnectionName = profile.Name,
-                    RowsAffected = affected,
-                    Messages = messages,
-                    DurationMs = Math.Round(writeStopwatch.Elapsed.TotalMilliseconds, 1)
-                };
+                var plan = command.GeneratePlan(compileForExecution: false);
+                fetchXml.AddRange(plan
+                    .SelectMany(Walk)
+                    .OfType<IFetchXmlExecutionPlanNode>()
+                    .Select(node => node.FetchXmlString));
             }
 
-            var stopwatch = Stopwatch.StartNew();
-
-            // Plan (en dus de FetchXML) maken zonder uit te voeren: zo kan de UI de
-            // vertaling tonen, ook als de query daarna faalt.
-            var plan = command.GeneratePlan(compileForExecution: false);
-            var fetchXml = plan
-                .SelectMany(Walk)
-                .OfType<IFetchXmlExecutionPlanNode>()
-                .Select(node => node.FetchXmlString)
-                .ToList();
-
-            var columns = new List<ResultColumn>();
-            var rows = new List<IReadOnlyList<object?>>();
-            var truncated = false;
+            command.StatementCompleted += (_, args) =>
+            {
+                if (args.RecordsAffected >= 0)
+                {
+                    rowsAffected += args.RecordsAffected;
+                    hasRowsAffected = true;
+                }
+            };
 
             using (var reader = command.ExecuteReader())
             {
-                for (var i = 0; i < reader.FieldCount; i++)
-                    columns.Add(new ResultColumn(reader.GetName(i), reader.GetDataTypeName(i)));
-
-                while (reader.Read())
+                if (!reader.IsClosed)
                 {
-                    if (rows.Count >= maxRows)
+                    do
                     {
-                        truncated = true;
-                        break;
+                        var columns = new List<ResultColumn>();
+                        for (var i = 0; i < reader.FieldCount; i++)
+                            columns.Add(new ResultColumn(reader.GetName(i), reader.GetDataTypeName(i)));
+
+                        var rows = new List<IReadOnlyList<object?>>();
+                        while (reader.Read())
+                        {
+                            if (rows.Count >= maxRows)
+                            {
+                                truncated = true;
+                                break;
+                            }
+
+                            var values = new object?[reader.FieldCount];
+                            for (var i = 0; i < reader.FieldCount; i++)
+                                values[i] = ToJsonValue(reader.IsDBNull(i) ? null : reader.GetValue(i));
+                            rows.Add(values);
+                        }
+
+                        if (columns.Count > 0)
+                            resultSets.Add(new QueryResultSet(columns, rows, rows.Count >= maxRows));
                     }
-
-                    var values = new object?[reader.FieldCount];
-
-                    for (var i = 0; i < reader.FieldCount; i++)
-                        values[i] = ToJsonValue(reader.IsDBNull(i) ? null : reader.GetValue(i));
-
-                    rows.Add(values);
+                    while (reader.NextResult());
                 }
             }
 
             stopwatch.Stop();
             _connections.Touch(profile.Id);
+            var primary = resultSets.FirstOrDefault();
 
             return new QueryResponse
             {
                 Ok = true,
                 ConnectionId = profile.Id,
                 ConnectionName = profile.Name,
-                Columns = columns,
-                Rows = rows,
+                Columns = primary?.Columns ?? Array.Empty<ResultColumn>(),
+                Rows = primary?.Rows ?? Array.Empty<IReadOnlyList<object?>>(),
+                ResultSets = resultSets,
                 Truncated = truncated,
                 FetchXml = fetchXml,
                 Messages = messages,
+                RowsAffected = hasRowsAffected ? rowsAffected : null,
                 DurationMs = Math.Round(stopwatch.Elapsed.TotalMilliseconds, 1)
             };
         }
