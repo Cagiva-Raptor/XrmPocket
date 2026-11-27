@@ -269,3 +269,58 @@ notes:
       - docs/digest-xrmpocket.md
       - CONTEXT.md
     status: active
+  - id: 2026-11-27-schrijven-toegestaan
+    date: 2026-11-27
+    title: "Schrijfacties (INSERT/UPDATE/DELETE) zijn toegestaan, ook op productie, op verzoek van de gebruiker"
+    decision: "XrmPocket voert INSERT, UPDATE en DELETE uit via de SQL 4 CDS-engine,
+      op elke verbinding inclusief SAV-PRD. Andere statements (DDL zoals CREATE, ALTER,
+      DROP) blijven geweigerd. Schrijfacties geven het aantal gewijzigde rijen terug
+      (RowsAffected). Handhaving: de gebruiker voert schrijfacties zelf uit via de UI;
+      de rechten zijn bepaald door de application user / security role in de
+      omgeving. Geen schrijfacties zonder dat de gebruiker de query bewust uitvoert."
+    rationale: "De gebruiker heeft expliciet gevraagd om schrijven en heeft de
+      beveiliging via de security role van de application user zelf in de hand. Dit
+      vervangt de eerdere regel 'alleen leesqueries' (2026-10-31 en HANDOVER §6
+      punt 3) voor de gebruiker zelf. Het SQL-veiligheidsfilter blijft DDL weigeren."
+    files:
+      - backend/XrmPocket.Api/Query/SqlSafetyCheck.cs
+      - backend/XrmPocket.Api/Query/QueryService.cs
+      - backend/XrmPocket.Api/Query/QueryModels.cs
+      - HANDOVER.md
+      - CONTEXT.md
+      - docs/digest-xrmpocket.md
+    status: active
+  - id: 2026-11-27-gereedschap-naast-sql
+    date: 2026-11-27
+    title: "Gereedschap (FetchXML Builder, Ribbon Workbench, Data Transporter, User Security Manager) als eigen implementatie"
+    decision: "Vier gereedschappen als tab naast de SQL-editor, eigen implementatie met de
+      Dataverse-SDK in backend/XrmPocket.Api/Tools. Ribbon Workbench alleen-lezen.
+      Data Transporter importeert CSV (tekstwaarden). User Security Manager wijzigt
+      rollen. Handhaving: geen code uit XrmToolBox (GPL-3.0) kopieren; alleen gedrag
+      als inspiratie; alleen op Dataverse-verbindingen, niet op de demo."
+    rationale: "De gebruiker wil dezelfde gereedschappen op de telefoon. Eigen code
+      voorkomt GPL-besmetting van het project. Aannames staan in
+      docs/gereedschap-aannames.md voor controle."
+    files:
+      - backend/XrmPocket.Api/Tools/ToolsEndpoints.cs
+      - web/src/Tools.tsx
+      - docs/gereedschap-aannames.md
+    status: active
+  - id: 2026-11-27-wachtwoord-toegang
+    date: 2026-11-27
+    title: "Toegang tot XrmPocket met een gedeeld wachtwoord uit XRMPOCKET_PASSWORD (fail closed)"
+    decision: "Alle /api-routes (behalve sessie, login, logout, health en de OAuth-callback)
+      vereisen een sessiecookie. Het wachtwoord komt uit de omgevingsvariabele
+      XRMPOCKET_PASSWORD, of anders uit secrets/wachtwoord.txt (map in .gitignore). Zonder beide
+      weigert de server elke API-aanroep (503). Sessiecookie is httpOnly, SameSite=Strict,
+      7 dagen geldig. Handhaving: het wachtwoord nooit in de repo, in logs of in de chat."
+    rationale: "De app draait op het LAN/Tailscale en bevat productietoegang. Zonder
+      wachtwoord kan iedereen op het netwerk de tools gebruiken. Fail closed voorkomt
+      dat een vergeten variabele de app onbeveiligd laat."
+    files:
+      - backend/XrmPocket.Api/Auth/AccessGate.cs
+      - backend/XrmPocket.Api/Program.cs
+      - web/src/Login.tsx
+      - web/src/api.ts
+      - web/src/App.tsx
+    status: active

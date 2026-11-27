@@ -21,3 +21,6 @@ backend/XrmPocket.Api/wwwroot/
 # Client secrets staan buiten de repo (~/.config/opencode/secrets/).
 secrets/
 *.secret
+
+secrets/
+sql/
