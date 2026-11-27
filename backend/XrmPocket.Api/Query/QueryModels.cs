@@ -16,13 +16,16 @@ public sealed class QueryRequest
 
     /// <summary>Aantal rijen dat de client wil; de backend kapt af op een harde grens.</summary>
     public int? MaxRows { get; set; }
+
+    /// <summary>Waar: alleen controleren en het plan tonen; niets uitvoeren.</summary>
+    public bool DryRun { get; set; }
 }
 
 /// <summary>Eén kolom in het resultaat.</summary>
 public sealed record ResultColumn(string Name, string Type);
 
 /// <summary>Foutmelding met een korte hint (in het Nederlands, voor in de UI).</summary>
-public sealed record QueryError(string Code, string Message, string? Hint);
+public sealed record QueryError(string Code, string Message, string? Hint, int? Line = null, int? Column = null);
 
 /// <summary>Alles wat de UI nodig heeft na één query.</summary>
 public sealed class QueryResponse
@@ -42,6 +45,12 @@ public sealed class QueryResponse
 
     /// <summary>Waar: de rijlimiet is bereikt, er waren meer rijen.</summary>
     public bool Truncated { get; init; }
+
+    /// <summary>Bij schrijfacties (INSERT/UPDATE/DELETE): aantal gewijzigde rijen.</summary>
+    public int? RowsAffected { get; init; }
+
+    /// <summary>Berichten van de engine, zoals PRINT-uitvoer van een script.</summary>
+    public IReadOnlyList<string> Messages { get; init; } = Array.Empty<string>();
 
     /// <summary>De FetchXML die de engine van deze SQL maakte.</summary>
     public IReadOnlyList<string> FetchXml { get; init; } = Array.Empty<string>();

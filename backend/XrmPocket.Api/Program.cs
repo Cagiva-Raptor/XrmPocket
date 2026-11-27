@@ -1,8 +1,11 @@
+using XrmPocket.Api.Auth;
 using XrmPocket.Api.Configuration;
 using XrmPocket.Api.Connections;
 using XrmPocket.Api.Environments;
 using XrmPocket.Api.Mock;
 using XrmPocket.Api.Query;
+using XrmPocket.Api.Statements;
+using XrmPocket.Api.Tools;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -13,6 +16,7 @@ builder.Services.AddSingleton<ConnectionStore>();
 builder.Services.AddSingleton<InteractiveAuthService>();
 builder.Services.AddSingleton<ConnectionFactory>();
 builder.Services.AddSingleton<QueryService>();
+builder.Services.AddSingleton<StatementStore>();
 
 // De web-UI draait in ontwikkeling op de Vite-server (5173) en praat met deze API.
 const string DevCors = "dev-web";
@@ -30,6 +34,8 @@ if (app.Environment.IsDevelopment())
 // achter dezelfde origin draait als de API.
 app.UseDefaultFiles();
 app.UseStaticFiles();
+
+app.MapAccessGate();
 
 app.MapGet("/api/health", () => Results.Ok(new
 {
@@ -213,6 +219,21 @@ app.MapGet("/api/connections/{id}/auth", (string id, ConnectionStore store, Inte
 
 app.MapPost("/api/query", async (QueryRequest request, QueryService service, CancellationToken cancellationToken)
     => Results.Ok(await service.ExecuteAsync(request, cancellationToken)));
+
+app.MapToolsEndpoints();
+
+app.MapGet("/api/statements", (StatementStore store) => Results.Ok(new { statements = store.List() }));
+
+app.MapPost("/api/statements", (SaveStatementRequest request, StatementStore store) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Sql))
+        return Results.BadRequest(new { error = "Geef een naam en een statement op." });
+
+    return Results.Ok(store.Save(request.Name, request.Sql));
+});
+
+app.MapDelete("/api/statements/{id}", (string id, StatementStore store) =>
+    store.Delete(id) ? Results.Ok(new { deleted = id }) : Results.NotFound(new { error = "Statement niet gevonden." }));
 
 // Alles wat geen API-pad is, gaat naar de PWA.
 app.MapFallbackToFile("index.html");

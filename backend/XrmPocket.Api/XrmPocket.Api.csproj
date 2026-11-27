@@ -11,6 +11,7 @@
   <ItemGroup>
     <!-- SQL 4 CDS-engine (MIT, Mark Carrington): SQL naar FetchXML + uitvoering, inprocess. -->
     <PackageReference Include="MarkMpn.Sql4Cds.Engine" Version="10.5.1" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="11.0.0" />
   </ItemGroup>
 
 </Project>
