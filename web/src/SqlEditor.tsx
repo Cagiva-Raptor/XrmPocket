@@ -1,13 +1,15 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { sql } from '@codemirror/lang-sql'
-import { Compartment, EditorState } from '@codemirror/state'
+import { Compartment, EditorState, type Extension } from '@codemirror/state'
 import { EditorView, highlightActiveLineGutter, keymap, lineNumbers } from '@codemirror/view'
 import { oneDark } from '@codemirror/theme-one-dark'
 import { vim } from '@replit/codemirror-vim'
 
 export interface SqlEditorHandle {
   getSelectedText: () => string
+  insertText: (text: string) => void
   focus: () => void
 }
 
@@ -16,12 +18,18 @@ interface Props {
   onChange: (value: string) => void
   onRun: () => void
   vimMode: boolean
+  dark: boolean
 }
 
-export const SqlEditor = forwardRef<SqlEditorHandle, Props>(function SqlEditor({ value, onChange, onRun, vimMode }, ref) {
+function themeExtension(dark: boolean): Extension {
+  return dark ? oneDark : syntaxHighlighting(defaultHighlightStyle, { fallback: true })
+}
+
+export const SqlEditor = forwardRef<SqlEditorHandle, Props>(function SqlEditor({ value, onChange, onRun, vimMode, dark }, ref) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   const vimCompartment = useRef(new Compartment())
+  const themeCompartment = useRef(new Compartment())
   const onChangeRef = useRef(onChange)
   const onRunRef = useRef(onRun)
 
@@ -53,7 +61,7 @@ export const SqlEditor = forwardRef<SqlEditorHandle, Props>(function SqlEditor({
             ...historyKeymap,
           ]),
           sql(),
-          oneDark,
+          themeCompartment.current.of(themeExtension(dark)),
           EditorView.lineWrapping,
           EditorView.theme({
             '&': { fontSize: '14px', borderRadius: '12px', height: '100%' },
@@ -87,6 +95,14 @@ export const SqlEditor = forwardRef<SqlEditorHandle, Props>(function SqlEditor({
     view.current?.dispatch({ effects: vimCompartment.current.reconfigure(vimMode ? vim() : []) })
   }, [vimMode])
 
+  useEffect(() => {
+    view.current?.dispatch({ effects: themeCompartment.current.reconfigure(themeExtension(dark)) })
+  }, [dark])
+
+  useEffect(() => {
+    view.current?.dispatch({ effects: themeCompartment.current.reconfigure(themeExtension(dark)) })
+  }, [dark])
+
   useImperativeHandle(
     ref,
     () => ({
@@ -97,6 +113,12 @@ export const SqlEditor = forwardRef<SqlEditorHandle, Props>(function SqlEditor({
         return editor.state.sliceDoc(range.from, range.to)
       },
       focus: () => view.current?.focus(),
+      insertText: (text: string) => {
+        const editor = view.current
+        if (!editor) return
+        editor.dispatch(editor.state.replaceSelection(text))
+        editor.focus()
+      },
     }),
     [],
   )

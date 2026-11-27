@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --bg: #f6f6f3;
   --panel: #ffffff;
   --ink: #16181d;
@@ -6,17 +7,79 @@
   --line: #e3e3de;
   --accent: #0b6b5f;
   --accent-ink: #ffffff;
-  --editor-bg: #101216;
-  --editor-ink: #e6e8eb;
+  --editor-bg: #ffffff;
+  --editor-ink: #16181d;
   --error-bg: #fdeceb;
   --error-ink: #8c2318;
   --notice-bg: #fff7e6;
   --notice-ink: #7a5200;
-
+  --surface-2: #f1f1ec;
+  --surface-3: #ecece7;
+  --border-notice: #f0dfb8;
+  --border-error: #f3cbc6;
+  --sel: rgba(30, 102, 245, 0.25);
+  --tok-keyword: #8839ef;
+  --tok-string: #40a02b;
+  --tok-number: #1e66a6;
+  --tok-comment: #7c7f93;
+  --tok-op: #5c5f77;
+  --ok-ink: #166534;
+  --warn-ink: #a16207;
+  --danger-ink: #b91c1c;
+  --badge-test-bg: #e6f0ff;
+  --badge-test-ink: #1d4ed8;
+  --badge-acc-bg: #fff4e0;
+  --badge-acc-ink: #a16207;
+  --badge-dev-bg: #eaf7ee;
+  --badge-dev-ink: #166534;
+  --badge-prod-bg: #fde8e8;
+  --badge-prod-ink: #b91c1c;
+  --badge-mock-bg: #eef2ff;
+  --badge-mock-ink: #4338ca;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
     sans-serif;
   color: var(--ink);
   background: var(--bg);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #15171c;
+  --panel: #1f2229;
+  --ink: #e6e8eb;
+  --muted: #9aa0aa;
+  --line: #2f333c;
+  --accent: #3fb9a6;
+  --accent-ink: #0b1210;
+  --editor-bg: #101216;
+  --editor-ink: #e6e8eb;
+  --error-bg: #3a1d1b;
+  --error-ink: #ffb4ab;
+  --notice-bg: #3a2f14;
+  --notice-ink: #ffd27a;
+  --surface-2: #2a2e36;
+  --surface-3: #343842;
+  --border-notice: #5a4a22;
+  --border-error: #5c2a25;
+  --sel: rgba(137, 180, 250, 0.35);
+  --tok-keyword: #f38ba8;
+  --tok-string: #a6e3a1;
+  --tok-number: #89dceb;
+  --tok-comment: #6c7086;
+  --tok-op: #9399b2;
+  --ok-ink: #7ee0a0;
+  --warn-ink: #f5b544;
+  --danger-ink: #ff9d9d;
+  --badge-test-bg: #1e2f4f;
+  --badge-test-ink: #9dbcff;
+  --badge-acc-bg: #3d2f12;
+  --badge-acc-ink: #f5c46b;
+  --badge-dev-bg: #173524;
+  --badge-dev-ink: #7ee0a0;
+  --badge-prod-bg: #4a1c1c;
+  --badge-prod-ink: #ff9d9d;
+  --badge-mock-bg: #242a4d;
+  --badge-mock-ink: #b3bcff;
 }
 
 * {
@@ -26,6 +89,8 @@
 body {
   margin: 0;
   min-height: 100dvh;
+  background: var(--bg);
+  color: var(--ink);
 }
 
 .app {
@@ -162,13 +227,13 @@ body {
   font-size: 14px;
   background: var(--notice-bg);
   color: var(--notice-ink);
-  border: 1px solid #f0dfb8;
+  border: 1px solid var(--border-notice);
 }
 
 .notice.error {
   background: var(--error-bg);
   color: var(--error-ink);
-  border-color: #f3cbc6;
+  border-color: var(--border-error);
 }
 
 .notice.error strong {
@@ -207,6 +272,40 @@ body {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
+}
+
+.icon-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.run.stop {
+  background: #b91c1c;
+  color: #ffffff;
+}
+
+.settings-tab {
+  margin-left: auto;
+}
+
+.tool-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.xls-button {
+  margin-right: 12px;
+}
+
+.icon-group.end {
+  margin-left: auto;
+}
+
+.editor-head.start {
+  justify-content: flex-start;
 }
 
 .results-head h2 {
@@ -269,30 +368,39 @@ body {
   background: transparent;
 }
 
+.sql-editor.plain-editor {
+  background: var(--editor-bg);
+  color: var(--editor-ink);
+}
+
+.sql-editor.plain-editor::selection {
+  background: var(--sel);
+}
+
 .sql-selected {
-  background: rgba(137, 180, 250, 0.35);
+  background: var(--sel);
   border-radius: 3px;
 }
 
 .tok-keyword {
-  color: #f38ba8;
+  color: var(--tok-keyword);
 }
 
 .tok-string {
-  color: #a6e3a1;
+  color: var(--tok-string);
 }
 
 .tok-number {
-  color: #89dceb;
+  color: var(--tok-number);
 }
 
 .tok-comment {
-  color: #6c7086;
+  color: var(--tok-comment);
   font-style: italic;
 }
 
 .tok-op {
-  color: #9399b2;
+  color: var(--tok-op);
 }
 
 
@@ -315,7 +423,7 @@ thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #f1f1ec;
+  background: var(--surface-2);
   text-align: left;
   font-weight: 600;
   padding: 10px 12px;
@@ -334,7 +442,7 @@ thead th .type {
 
 tbody td {
   padding: 8px 12px;
-  border-bottom: 1px solid #f1f1ec;
+  border-bottom: 1px solid var(--line);
   white-space: nowrap;
   max-width: 380px;
   overflow: hidden;
@@ -342,7 +450,7 @@ tbody td {
 }
 
 tbody tr:hover td {
-  background: #fafaf7;
+  background: var(--surface-2);
 }
 
 td.row-number,
@@ -359,8 +467,17 @@ td.cell-number {
 }
 
 td.cell-null {
-  color: #9ca3af;
+  color: var(--muted);
   font-style: italic;
+}
+
+.result-set + .result-set {
+  margin-top: 14px;
+}
+
+.result-label {
+  margin: 0 0 8px;
+  font-size: 14px;
 }
 
 /* FetchXML */
@@ -380,7 +497,7 @@ td.cell-null {
   margin: 10px 0 0;
   padding: 12px;
   border-radius: 12px;
-  background: #f6f6f2;
+  background: var(--surface-2);
   border: 1px solid var(--line);
   overflow: auto;
   font-size: 12px;
@@ -426,6 +543,54 @@ td.cell-null {
   font-size: 14px;
 }
 
+.highlight-select {
+  color: var(--ink);
+}
+
+.highlight-select.hl-dev,
+.highlight-select option.hl-option-dev {
+  background-color: var(--badge-dev-bg);
+  color: var(--badge-dev-ink);
+}
+
+.highlight-select.hl-test,
+.highlight-select option.hl-option-test {
+  background-color: var(--badge-test-bg);
+  color: var(--badge-test-ink);
+}
+
+.highlight-select.hl-acc,
+.highlight-select option.hl-option-acc {
+  background-color: var(--badge-acc-bg);
+  color: var(--badge-acc-ink);
+}
+
+.highlight-select.hl-production,
+.highlight-select option.hl-option-production {
+  background-color: var(--badge-prod-bg);
+  color: var(--badge-prod-ink);
+}
+
+.statusbar.hl-dev {
+  background: var(--badge-dev-bg);
+  color: var(--badge-dev-ink);
+}
+
+.statusbar.hl-test {
+  background: var(--badge-test-bg);
+  color: var(--badge-test-ink);
+}
+
+.statusbar.hl-acc {
+  background: var(--badge-acc-bg);
+  color: var(--badge-acc-ink);
+}
+
+.statusbar.hl-production {
+  background: var(--badge-prod-bg);
+  color: var(--badge-prod-ink);
+}
+
 .badge {
   display: inline-block;
   border-radius: 999px;
@@ -434,48 +599,48 @@ td.cell-null {
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  background: #ecece7;
-  color: #4b5563;
+  background: var(--surface-3);
+  color: var(--muted);
 }
 
 .badge-test {
-  background: #e6f0ff;
-  color: #1d4ed8;
+  background: var(--badge-test-bg);
+  color: var(--badge-test-ink);
 }
 
 .badge-acc {
-  background: #fff4e0;
-  color: #a16207;
+  background: var(--badge-acc-bg);
+  color: var(--badge-acc-ink);
 }
 
 .badge-dev {
-  background: #eaf7ee;
-  color: #166534;
+  background: var(--badge-dev-bg);
+  color: var(--badge-dev-ink);
 }
 
 .badge-production {
-  background: #fde8e8;
-  color: #b91c1c;
+  background: var(--badge-prod-bg);
+  color: var(--badge-prod-ink);
 }
 
 .badge-mock {
-  background: #eef2ff;
-  color: #4338ca;
+  background: var(--badge-mock-bg);
+  color: var(--badge-mock-ink);
 }
 
 .default-mark {
-  color: #d97706;
+  color: var(--warn-ink);
   margin-left: 6px;
 }
 
 .test-ok {
-  color: #166534;
+  color: var(--ok-ink);
   font-size: 13px;
   margin: 4px 0 0;
 }
 
 .test-error {
-  color: #b91c1c;
+  color: var(--danger-ink);
   font-size: 13px;
   margin: 4px 0 0;
   white-space: pre-wrap;
@@ -494,7 +659,7 @@ td.cell-null {
 }
 
 .ghost:hover:not(:disabled) {
-  background: #f6f6f2;
+  background: var(--surface-2);
 }
 
 .ghost:disabled {
@@ -508,8 +673,8 @@ td.cell-null {
 }
 
 .ghost.danger {
-  color: #b91c1c;
-  border-color: #f3cbc6;
+  color: var(--danger-ink);
+  border-color: var(--border-error);
 }
 
 /* Invoervelden */
@@ -640,13 +805,13 @@ td.cell-null {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.3px;
-  background: #eaf7ee;
-  color: #166534;
+  background: var(--badge-dev-bg);
+  color: var(--ok-ink);
 }
 
 .pill.danger {
-  background: #fde8e8;
-  color: #b91c1c;
+  background: var(--badge-prod-bg);
+  color: var(--danger-ink);
 }
 
 /* Weergave-tabs en gereedschap */
@@ -808,16 +973,26 @@ td.cell-null {
   font-weight: 600;
 }
 
+.editor-stats {
+  margin-top: 8px;
+  text-align: right;
+}
+
 /* CodeMirror-editor (SQL) */
 .sql-codemirror {
-  min-height: 220px;
-  max-height: 60vh;
+  min-height: 420px;
+  height: 70dvh;
+  max-height: none;
 }
 
 .sql-codemirror .cm-editor {
   height: 100%;
-  max-height: 60vh;
+  max-height: none;
   border-radius: 12px;
+}
+
+.sql-codemirror .cm-scroller {
+  overflow: auto;
 }
 
 .sql-codemirror .cm-editor.cm-focused {

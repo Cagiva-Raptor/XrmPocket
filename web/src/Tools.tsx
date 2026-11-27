@@ -1,13 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
+  deleteStatement,
   fetchRibbonXml,
   fetchRoles,
   fetchUserRoles,
   fetchUsers,
   importRows,
+  listStatements,
   runFetchXml,
+  saveStatement,
   setUserRole,
   type CellValue,
+  type SavedStatement,
   type ToolRole,
   type ToolUser,
 } from './api'
@@ -32,10 +36,43 @@ const FETCH_EXAMPLE = `<fetch top="50">
 interface Props {
   connectionId: string
   isMock: boolean
+  orgUrl: string | null
+  maxRows: number
   tool: ToolId
 }
 
-export function Tools({ connectionId, isMock, tool }: Props) {
+interface FetchSettings {
+  autoFormat: boolean
+  idLinks: boolean
+}
+
+const FETCH_SETTINGS_KEY = 'xrmpocket.tool.fetchxml'
+const DEFAULT_FETCH_SETTINGS: FetchSettings = { autoFormat: true, idLinks: true }
+
+function loadFetchSettings(): FetchSettings {
+  try {
+    return { ...DEFAULT_FETCH_SETTINGS, ...(JSON.parse(localStorage.getItem(FETCH_SETTINGS_KEY) ?? '{}') as Partial<FetchSettings>) }
+  } catch {
+    return DEFAULT_FETCH_SETTINGS
+  }
+}
+
+export function Tools({
+  connectionId,
+  isMock,
+  orgUrl,
+  maxRows,
+  tool,
+  settingsOpen,
+  onCloseSettings,
+}: Props & { settingsOpen: boolean; onCloseSettings: () => void }) {
+  const [fetchSettings, setFetchSettings] = useState<FetchSettings>(loadFetchSettings)
+
+  function updateFetchSettings(next: FetchSettings) {
+    setFetchSettings(next)
+    localStorage.setItem(FETCH_SETTINGS_KEY, JSON.stringify(next))
+  }
+
   if (isMock) {
     return (
       <section className="editor">
@@ -44,12 +81,59 @@ export function Tools({ connectionId, isMock, tool }: Props) {
     )
   }
 
+  const toolLabel = TOOL_TABS.find((item) => item.id === tool)?.label ?? ''
+
   return (
     <section className="tools">
-      {tool === 'fetchxml' && <FetchXmlBuilder connectionId={connectionId} />}
+      {tool === 'fetchxml' && (
+        <FetchXmlBuilder
+          connectionId={connectionId}
+          orgUrl={fetchSettings.idLinks ? orgUrl : null}
+          maxRows={maxRows}
+          autoFormat={fetchSettings.autoFormat}
+        />
+      )}
       {tool === 'ribbon' && <RibbonViewer connectionId={connectionId} />}
       {tool === 'transporter' && <DataTransporter connectionId={connectionId} />}
-      {tool === 'security' && <UserSecurity connectionId={connectionId} />}
+      {tool === 'security' && <UserSecurity connectionId={connectionId} maxRows={maxRows} />}
+
+      {settingsOpen && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label={`Instellingen ${toolLabel}`}>
+          <div className="modal">
+            <div className="modal-head">
+              <h2>{toolLabel}: instellingen</h2>
+              <button className="ghost small" onClick={onCloseSettings}>
+                Sluiten
+              </button>
+            </div>
+            <div className="modal-body">
+              {tool === 'fetchxml' ? (
+                <>
+                  <label className="field field-inline">
+                    <input
+                      type="checkbox"
+                      checked={fetchSettings.autoFormat}
+                      onChange={(event) => updateFetchSettings({ ...fetchSettings, autoFormat: event.target.checked })}
+                    />
+                    <span>XML automatisch formatteren bij plakken</span>
+                  </label>
+                  <label className="field field-inline">
+                    <input
+                      type="checkbox"
+                      checked={fetchSettings.idLinks}
+                      onChange={(event) => updateFetchSettings({ ...fetchSettings, idLinks: event.target.checked })}
+                    />
+                    <span>ID-kolommen als link naar het record tonen</span>
+                  </label>
+                  <p className="hint">Het aantal rijen komt uit de algemene instelling "Max. rijen".</p>
+                </>
+              ) : (
+                <p className="hint">Dit gereedschap heeft nog geen eigen instellingen.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
@@ -58,17 +142,130 @@ function ErrorLine({ message }: { message: string | null }) {
   return message ? <p className="notice error">{message}</p> : null
 }
 
-function FetchXmlBuilder({ connectionId }: { connectionId: string }) {
+function escapeXml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+}
+
+function serializeXml(el: Element, depth: number): string {
+  const pad = '  '.repeat(depth)
+  const attrs = Array.from(el.attributes)
+    .map((attr) => ` ${attr.name}="${escapeXml(attr.value)}"`)
+    .join('')
+  const children = Array.from(el.childNodes).filter(
+    (node) => node.nodeType === Node.ELEMENT_NODE || (node.nodeType === Node.TEXT_NODE && node.textContent?.trim()),
+  )
+  if (children.length === 0) return `${pad}<${el.nodeName}${attrs}/>`
+  if (children.length === 1 && children[0].nodeType === Node.TEXT_NODE) {
+    return `${pad}<${el.nodeName}${attrs}>${escapeXml(children[0].textContent?.trim() ?? '')}</${el.nodeName}>`
+  }
+  const inner = children
+    .map((node) =>
+      node.nodeType === Node.ELEMENT_NODE
+        ? serializeXml(node as Element, depth + 1)
+        : `${'  '.repeat(depth + 1)}${escapeXml(node.textContent?.trim() ?? '')}`,
+    )
+    .join('\n')
+  return `${pad}<${el.nodeName}${attrs}>\n${inner}\n${pad}</${el.nodeName}>`
+}
+
+function checkFetchXml(input: string): { text: string; error: string | null } {
+  if (!input.trim()) return { text: input, error: 'Plak of typ een FetchXML-query.' }
+  const doc = new DOMParser().parseFromString(input, 'application/xml')
+  const parseError = doc.querySelector('parsererror')
+  if (parseError) {
+    return { text: input, error: `Ongeldige XML: ${parseError.textContent?.split('\n')[0] ?? 'onbekende fout'}` }
+  }
+  const root = doc.documentElement
+  if (root.nodeName !== 'fetch') return { text: input, error: 'Het hoofdelement moet <fetch> zijn.' }
+  if (!root.querySelector(':scope > entity')) return { text: input, error: 'Er is geen <entity> binnen <fetch>.' }
+  return { text: serializeXml(root, 0), error: null }
+}
+
+function FetchXmlBuilder({
+  connectionId,
+  orgUrl,
+  maxRows,
+  autoFormat,
+}: {
+  connectionId: string
+  orgUrl: string | null
+  maxRows: number
+  autoFormat: boolean
+}) {
   const [xml, setXml] = useState(FETCH_EXAMPLE)
-  const [result, setResult] = useState<{ columns: string[]; rows: CellValue[][]; truncated: boolean } | null>(null)
+  const [result, setResult] = useState<{ columns: string[]; rows: CellValue[][]; truncated: boolean; entity: string | null } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const check = useMemo(() => checkFetchXml(xml), [xml])
+  const [saved, setSaved] = useState<SavedStatement[]>([])
+  const [selectedSaved, setSelectedSaved] = useState('')
+
+  useEffect(() => {
+    void refreshSaved()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function refreshSaved() {
+    try {
+      setSaved((await listStatements('fetchxml')).statements)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  function selectSaved(id: string) {
+    setSelectedSaved(id)
+    const item = saved.find((entry) => entry.id === id)
+    if (item) setXml(item.sql)
+  }
+
+  async function saveCurrent() {
+    if (check.error) {
+      setError('Corrigeer eerst de XML voordat je opslaat.')
+      return
+    }
+    const name = window.prompt('Naam voor deze FetchXML')?.trim()
+    if (!name) return
+
+    try {
+      const item = await saveStatement(name, check.text, 'fetchxml')
+      await refreshSaved()
+      setSelectedSaved(item.id)
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function removeSaved() {
+    const item = saved.find((entry) => entry.id === selectedSaved)
+    if (!item || !window.confirm(`FetchXML '${item.name}' verwijderen?`)) return
+
+    try {
+      await deleteStatement(item.id)
+      setSelectedSaved('')
+      await refreshSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const pasted = event.clipboardData.getData('text')
+    if (!autoFormat) return
+    const formatted = checkFetchXml(pasted)
+    if (formatted.error) return
+    event.preventDefault()
+    setXml(formatted.text)
+  }
 
   async function run() {
+    if (check.error) return
     setBusy(true)
     setError(null)
     try {
-      setResult(await runFetchXml(connectionId, xml, 200))
+      const response = await runFetchXml(connectionId, check.text, maxRows)
+      setResult({ ...response, entity: new DOMParser().parseFromString(check.text, 'application/xml').querySelector('entity')?.getAttribute('name') ?? null })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
       setResult(null)
@@ -79,19 +276,64 @@ function FetchXmlBuilder({ connectionId }: { connectionId: string }) {
 
   return (
     <div className="tool-body">
-      <textarea className="sql-editor" value={xml} onChange={(event) => setXml(event.target.value)} rows={12} spellCheck={false} />
+      <div className="editor-head start">
+        <label className="field field-inline">
+          <span>Opgeslagen</span>
+          <select value={selectedSaved} onChange={(event) => selectSaved(event.target.value)}>
+            <option value="">{saved.length ? 'Kies…' : 'Nog niets opgeslagen'}</option>
+            {saved.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="icon-group">
+          <button className="ghost icon-button" onClick={() => void saveCurrent()} disabled={busy} aria-label="Opslaan" title="Opslaan">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+              <path d="M17 21v-8H7v8M7 3v5h8" />
+            </svg>
+          </button>
+          <button
+            className="ghost icon-button danger"
+            onClick={() => void removeSaved()}
+            disabled={busy || !selectedSaved}
+            aria-label="Verwijderen"
+            title="Verwijderen"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+            </svg>
+          </button>
+        </div>
+        <div className="icon-group end">
+          <button className="ghost" onClick={() => setXml(check.text)} disabled={busy || check.error !== null}>
+            Formatteer
+          </button>
+          <button className="run" onClick={() => void run()} disabled={busy || check.error !== null}>
+            {busy ? 'Bezig…' : 'FetchXML uitvoeren'}
+          </button>
+        </div>
+      </div>
+      <textarea
+        className="sql-editor plain-editor"
+        value={xml}
+        onChange={(event) => setXml(event.target.value)}
+        onPaste={handlePaste}
+        rows={12}
+        spellCheck={false}
+      />
       <div className="tool-actions">
-        <button className="run" onClick={() => void run()} disabled={busy}>
-          {busy ? 'Bezig…' : 'FetchXML uitvoeren'}
-        </button>
         {result && (
           <span className="meta">
             {result.rows.length} rijen{result.truncated ? ' (afgekapt)' : ''}
           </span>
         )}
       </div>
+      {check.error ? <ErrorLine message={check.error} /> : <p className="meta">XML is geldig.</p>}
       <ErrorLine message={error} />
-      {result && <SimpleGrid columns={result.columns} rows={result.rows} />}
+      {result && <SimpleGrid columns={result.columns} rows={result.rows} orgUrl={orgUrl} entity={result.entity} />}
     </div>
   )
 }
@@ -221,7 +463,7 @@ function DataTransporter({ connectionId }: { connectionId: string }) {
   )
 }
 
-function UserSecurity({ connectionId }: { connectionId: string }) {
+function UserSecurity({ connectionId, maxRows }: { connectionId: string; maxRows: number }) {
   const [users, setUsers] = useState<ToolUser[]>([])
   const [roles, setRoles] = useState<ToolRole[]>([])
   const [userRoles, setUserRoles] = useState<ToolRole[]>([])
@@ -348,8 +590,8 @@ function UserSecurity({ connectionId }: { connectionId: string }) {
             </label>
           </div>
           <p className="meta">{available.length} rollen beschikbaar</p>
-          <RoleTable roles={available.slice(0, 200)} actionLabel="Toevoegen" disabled={busy} onAction={(role) => void changeRole(role.id, true)} />
-          {available.length > 200 && <p className="meta">Eerste 200 getoond; verfijn met zoeken.</p>}
+          <RoleTable roles={available.slice(0, maxRows)} actionLabel="Toevoegen" disabled={busy} onAction={(role) => void changeRole(role.id, true)} />
+          {available.length > maxRows && <p className="meta">Eerste {maxRows} getoond; verfijn met zoeken.</p>}
         </>
       )}
     </div>
@@ -397,7 +639,24 @@ function RoleTable({
   )
 }
 
-function SimpleGrid({ columns, rows }: { columns: string[]; rows: CellValue[][] }) {
+const GUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function recordLink(orgUrl: string | null, entity: string | null, column: string, cell: CellValue): string | null {
+  if (!orgUrl || !entity || column !== `${entity}id` || typeof cell !== 'string' || !GUID_PATTERN.test(cell)) return null
+  return `${orgUrl.replace(/\/+$/, '')}/main.aspx?etn=${encodeURIComponent(entity)}&id=${cell}&pagetype=entityrecord`
+}
+
+function SimpleGrid({
+  columns,
+  rows,
+  orgUrl = null,
+  entity = null,
+}: {
+  columns: string[]
+  rows: CellValue[][]
+  orgUrl?: string | null
+  entity?: string | null
+}) {
   return (
     <div className="grid-wrap">
       <table className="grid">
@@ -411,9 +670,11 @@ function SimpleGrid({ columns, rows }: { columns: string[]; rows: CellValue[][] 
         <tbody>
           {rows.map((row, rowIndex) => (
             <tr key={rowIndex}>
-              {row.map((cell, cellIndex) => (
-                <td key={cellIndex}>{cell === null ? '' : typeof cell === 'object' ? JSON.stringify(cell) : String(cell)}</td>
-              ))}
+              {row.map((cell, cellIndex) => {
+                const link = recordLink(orgUrl, entity, columns[cellIndex], cell)
+                const text = cell === null ? '' : typeof cell === 'object' ? JSON.stringify(cell) : String(cell)
+                return <td key={cellIndex}>{link ? <a href={link} target="_blank" rel="noreferrer">{text}</a> : text}</td>
+              })}
             </tr>
           ))}
         </tbody>

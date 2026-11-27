@@ -313,6 +313,21 @@ export function ConnectionManager({ open, connections, templates, redirectUri, o
                 </select>
               </label>
 
+              <label className="field">
+                <span>Kleur</span>
+                <select
+                  className={`highlight-select hl-${form.highlight}`}
+                  value={form.highlight}
+                  onChange={(event) => setForm({ ...form, highlight: event.target.value as Highlight })}
+                >
+                  <option value="none" className="hl-option-none">Geen</option>
+                  <option value="dev" className="hl-option-dev">Dev (groen)</option>
+                  <option value="test" className="hl-option-test">Test (blauw)</option>
+                  <option value="acc" className="hl-option-acc">Acc (geel)</option>
+                  <option value="production" className="hl-option-production">Productie (rood)</option>
+                </select>
+              </label>
+
               {form.kind === 'dataverse' && (
                 <>
                   <label className="field">
