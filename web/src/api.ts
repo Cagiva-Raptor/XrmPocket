@@ -83,6 +83,8 @@ export interface QueryError {
   code: string
   message: string
   hint: string | null
+  line?: number | null
+  column?: number | null
 }
 
 export interface QueryResponse {
@@ -93,6 +95,8 @@ export interface QueryResponse {
   rows: CellValue[][]
   rowCount: number
   truncated: boolean
+  rowsAffected: number | null
+  messages: string[]
   fetchXml: string[]
   durationMs: number
   error: QueryError | null
@@ -100,6 +104,10 @@ export interface QueryResponse {
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init)
+
+  if (response.status === 401 && !url.startsWith('/api/login')) {
+    window.dispatchEvent(new Event('xp-auth-required'))
+  }
 
   if (!response.ok) {
     let message = `${response.status} ${response.statusText}`
@@ -171,11 +179,16 @@ export function signOut(id: string): Promise<{ signedOut: string }> {
   return request<{ signedOut: string }>(`/api/connections/${id}/signout`, { method: 'POST' })
 }
 
-export function runQuery(sql: string, connectionId: string | null, maxRows: number): Promise<QueryResponse> {
+export function runQuery(
+  sql: string,
+  connectionId: string | null,
+  maxRows: number,
+  dryRun = false,
+): Promise<QueryResponse> {
   return request<QueryResponse>('/api/query', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ sql, connectionId, maxRows }),
+    body: JSON.stringify({ sql, connectionId, maxRows, dryRun }),
   })
 }
 
@@ -188,4 +201,107 @@ export function formatCell(value: CellValue): string {
     return JSON.stringify(value)
   }
   return String(value)
+}
+
+export interface ToolRole {
+  id: string
+  name: string
+  businessUnitId: string | null
+  businessUnit: string | null
+}
+
+export interface ToolUser {
+  id: string
+  fullName: string | null
+  domainName: string | null
+  isDisabled: boolean
+  applicationId: string | null
+  businessUnitId: string | null
+}
+
+export interface ToolFetchResult {
+  columns: string[]
+  rows: CellValue[][]
+  truncated: boolean
+}
+
+function jsonPost<T>(url: string, body: unknown): Promise<T> {
+  return request<T>(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export function fetchRoles(connectionId: string): Promise<{ roles: ToolRole[] }> {
+  return request(`/api/tools/roles?connectionId=${encodeURIComponent(connectionId)}`)
+}
+
+export function fetchUsers(connectionId: string): Promise<{ users: ToolUser[] }> {
+  return request(`/api/tools/users?connectionId=${encodeURIComponent(connectionId)}`)
+}
+
+export function fetchUserRoles(connectionId: string, userId: string): Promise<{ roles: ToolRole[] }> {
+  return request(`/api/tools/users/${encodeURIComponent(userId)}/roles?connectionId=${encodeURIComponent(connectionId)}`)
+}
+
+export function setUserRole(connectionId: string, userId: string, roleId: string, assign: boolean): Promise<unknown> {
+  return jsonPost(`/api/tools/users/${encodeURIComponent(userId)}/roles`, { connectionId, roleId, assign })
+}
+
+export function runFetchXml(connectionId: string, fetchXml: string, maxRows: number): Promise<ToolFetchResult> {
+  return jsonPost('/api/tools/fetchxml', { connectionId, fetchXml, maxRows })
+}
+
+export function fetchRibbonXml(connectionId: string, entity: string): Promise<{ entity: string; xml: string }> {
+  return request(`/api/tools/ribbon?entity=${encodeURIComponent(entity)}&connectionId=${encodeURIComponent(connectionId)}`)
+}
+
+export function importRows(
+  connectionId: string,
+  entity: string,
+  rows: Record<string, string | null>[],
+  dryRun: boolean,
+): Promise<{ dryRun: boolean; rows?: number; columns?: string[]; created?: number; errors?: string[] }> {
+  return jsonPost('/api/tools/import', { connectionId, entity, rows, dryRun })
+}
+
+export interface SessionState {
+  authenticated: boolean
+  passwordConfigured: boolean
+}
+
+export function getSession(): Promise<SessionState> {
+  return request<SessionState>('/api/session')
+}
+
+export async function login(password: string): Promise<void> {
+  await request('/api/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ password }),
+  })
+}
+
+export function logout(): Promise<unknown> {
+  return request('/api/logout', { method: 'POST' })
+}
+
+export interface SavedStatement {
+  id: string
+  name: string
+  sql: string
+  createdOn: string
+}
+
+export function listStatements(): Promise<{ statements: SavedStatement[] }> {
+  return request('/api/statements')
+}
+
+export function saveStatement(name: string, sql: string): Promise<SavedStatement> {
+  return jsonPost<SavedStatement>('/api/statements', { name, sql })
+}
+
+export function deleteStatement(id: string): Promise<unknown> {
+  return request(`/api/statements/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }

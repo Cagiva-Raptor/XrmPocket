@@ -10,7 +10,7 @@ interface Props {
  * Dit is de web-versie van de statusbalk in XrmToolBox, aangevuld met de
  * application-user-check.
  */
-export function ConnectionTestSummary({ test, compact = false }: Props) {
+export function ConnectionTestSummary({ test }: Props) {
   if (!test.ok) {
     return (
       <p className="test-error">
@@ -27,7 +27,6 @@ export function ConnectionTestSummary({ test, compact = false }: Props) {
   return (
     <p className="test-ok">
       ✔ {organization}
-      {test.organizationUniqueName && !compact ? ` [${test.organizationUniqueName}]` : ''}
       {version}
 
       {user && (
