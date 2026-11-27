@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   deleteStatement,
+  fetchEntities,
+  fetchEntityMetadata,
   fetchRibbonXml,
   fetchRoles,
   fetchUserRoles,
@@ -12,6 +14,8 @@ import {
   setUserRole,
   type CellValue,
   type SavedStatement,
+  type ToolAttribute,
+  type ToolEntity,
   type ToolRole,
   type ToolUser,
 } from './api'
@@ -197,6 +201,35 @@ function FetchXmlBuilder({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const check = useMemo(() => checkFetchXml(xml), [xml])
+  const [entities, setEntities] = useState<ToolEntity[]>([])
+  const [attributes, setAttributes] = useState<ToolAttribute[]>([])
+  const [entityChoice, setEntityChoice] = useState('account')
+  const [attributeChoice, setAttributeChoice] = useState('')
+
+  useEffect(() => {
+    void fetchEntities(connectionId).then((response) => setEntities(response.entities)).catch((err) => setError(String(err)))
+  }, [connectionId])
+
+  useEffect(() => {
+    if (!entityChoice) return
+    void fetchEntityMetadata(connectionId, entityChoice).then((response) => setAttributes(response.attributes)).catch((err) => setError(String(err)))
+  }, [connectionId, entityChoice])
+
+  function addAttribute() {
+    const doc = new DOMParser().parseFromString(xml, 'application/xml')
+    if (doc.querySelector('parsererror')) return
+    let entity = doc.querySelector('entity')
+    if (!entity) {
+      doc.documentElement.innerHTML = `<entity name="${entityChoice}" />`
+      entity = doc.querySelector('entity')
+    }
+    if (!entity || !attributeChoice || entity.querySelector(`attribute[name="${attributeChoice}"]`)) return
+    const attribute = doc.createElement('attribute')
+    attribute.setAttribute('name', attributeChoice)
+    entity.appendChild(attribute)
+    setXml(serializeXml(doc.documentElement, 0))
+    setAttributeChoice('')
+  }
   const [saved, setSaved] = useState<SavedStatement[]>([])
   const [selectedSaved, setSelectedSaved] = useState('')
 
@@ -307,6 +340,31 @@ function FetchXmlBuilder({
             </svg>
           </button>
         </div>
+        <label className="field field-inline">
+          <span>Entity</span>
+          <select value={entityChoice} onChange={(event) => setEntityChoice(event.target.value)}>
+            {!entities.some((item) => item.logicalName === entityChoice) && <option value={entityChoice}>{entityChoice}</option>}
+            {entities.map((item) => (
+              <option key={item.logicalName} value={item.logicalName}>
+                {item.displayName} ({item.logicalName})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field field-inline">
+          <span>Attribute</span>
+          <select value={attributeChoice} onChange={(event) => setAttributeChoice(event.target.value)}>
+            <option value="">Kies…</option>
+            {attributes.map((item) => (
+              <option key={item.logicalName} value={item.logicalName}>
+                {item.displayName} ({item.logicalName}: {item.type})
+              </option>
+            ))}
+          </select>
+        </label>
+        <button className="ghost" onClick={addAttribute} disabled={!attributeChoice}>
+          Attribute toevoegen
+        </button>
         <div className="icon-group end">
           <button className="ghost" onClick={() => setXml(check.text)} disabled={busy || check.error !== null}>
             Formatteer
@@ -343,6 +401,11 @@ function RibbonViewer({ connectionId }: { connectionId: string }) {
   const [xml, setXml] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [entities, setEntities] = useState<ToolEntity[]>([])
+
+  useEffect(() => {
+    void fetchEntities(connectionId).then((response) => setEntities(response.entities)).catch((err) => setError(String(err)))
+  }, [connectionId])
 
   async function load() {
     setBusy(true)
@@ -363,7 +426,10 @@ function RibbonViewer({ connectionId }: { connectionId: string }) {
       <div className="tool-actions">
         <label className="field field-inline">
           <span>Tabel (logische naam)</span>
-          <input value={entity} onChange={(event) => setEntity(event.target.value)} />
+          <input list="ribbon-entities" value={entity} onChange={(event) => setEntity(event.target.value)} />
+          <datalist id="ribbon-entities">
+            {entities.map((item) => <option key={item.logicalName} value={item.logicalName}>{item.displayName}</option>)}
+          </datalist>
         </label>
         <button className="run" onClick={() => void load()} disabled={busy || !entity.trim()}>
           {busy ? 'Bezig…' : 'Ribbon ophalen'}
@@ -387,6 +453,17 @@ function DataTransporter({ connectionId }: { connectionId: string }) {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [entities, setEntities] = useState<ToolEntity[]>([])
+  const [attributes, setAttributes] = useState<ToolAttribute[]>([])
+
+  useEffect(() => {
+    void fetchEntities(connectionId).then((response) => setEntities(response.entities)).catch((err) => setError(String(err)))
+  }, [connectionId])
+
+  useEffect(() => {
+    if (!entity.trim()) return setAttributes([])
+    void fetchEntityMetadata(connectionId, entity.trim()).then((response) => setAttributes(response.attributes)).catch((err) => setError(String(err)))
+  }, [connectionId, entity])
 
   async function handleFile(file: File) {
     setError(null)
@@ -401,6 +478,7 @@ function DataTransporter({ connectionId }: { connectionId: string }) {
     try {
       const preview = await importRows(connectionId, entity.trim(), rows, true)
       setMessage(`Controle: ${preview.rows} rijen voor ${entity.trim()} (kolommen: ${(preview.columns ?? []).join(', ')}).`)
+      if (preview.errors?.length) setError(preview.errors.slice(0, 20).join('\n'))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -426,13 +504,16 @@ function DataTransporter({ connectionId }: { connectionId: string }) {
   return (
     <div className="tool-body">
       <p className="meta">
-        Importeert een CSV-bestand als nieuwe records. Eerste rij = kolomnamen (logische namen). Alleen tekstwaarden; lookups en
-        keuzelijsten nog niet.
+        Importeert een CSV-bestand als nieuwe records. Eerste rij = kolomnamen (logische namen). Tekst, getallen, datums, booleans,
+        keuzelijsten en lookups worden gevalideerd. Lookupformaat: logicalname:GUID.
       </p>
       <div className="tool-actions">
         <label className="field field-inline">
           <span>Tabel (logische naam)</span>
-          <input value={entity} onChange={(event) => setEntity(event.target.value)} />
+          <input list="import-entities" value={entity} onChange={(event) => setEntity(event.target.value)} />
+          <datalist id="import-entities">
+            {entities.map((item) => <option key={item.logicalName} value={item.logicalName}>{item.displayName}</option>)}
+          </datalist>
         </label>
         <input
           type="file"
@@ -443,6 +524,20 @@ function DataTransporter({ connectionId }: { connectionId: string }) {
           }}
         />
       </div>
+      {attributes.length > 0 && (
+        <details className="fetchxml">
+          <summary>Kolommen en typen ({attributes.length})</summary>
+          <SimpleGrid
+            columns={['Kolom', 'Type', 'Targets', 'Keuzeopties']}
+            rows={attributes.map((item) => [
+              item.logicalName,
+              item.type,
+              item.targets.join(', '),
+              item.options?.map((option) => `${option.value}: ${option.label}`).join('; ') ?? '',
+            ])}
+          />
+        </details>
+      )}
       {fileName && (
         <p className="meta">
           {fileName}: {rows.length} rijen

@@ -252,6 +252,30 @@ export function setUserRole(connectionId: string, userId: string, roleId: string
   return jsonPost(`/api/tools/users/${encodeURIComponent(userId)}/roles`, { connectionId, roleId, assign })
 }
 
+export interface ToolEntity {
+  logicalName: string
+  displayName: string
+  primaryId: string
+  primaryName: string
+}
+
+export interface ToolAttribute {
+  logicalName: string
+  displayName: string
+  type: string
+  targets: string[]
+  options: { value: number; label: string | null }[] | null
+  required: string
+}
+
+export function fetchEntities(connectionId: string): Promise<{ entities: ToolEntity[] }> {
+  return request(`/api/tools/entities?connectionId=${encodeURIComponent(connectionId)}`)
+}
+
+export function fetchEntityMetadata(connectionId: string, entity: string): Promise<{ attributes: ToolAttribute[] }> {
+  return request(`/api/tools/metadata/${encodeURIComponent(entity)}?connectionId=${encodeURIComponent(connectionId)}`)
+}
+
 export function runFetchXml(connectionId: string, fetchXml: string, maxRows: number): Promise<ToolFetchResult> {
   return jsonPost('/api/tools/fetchxml', { connectionId, fetchXml, maxRows })
 }
