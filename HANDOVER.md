@@ -45,7 +45,7 @@ nog niet ingericht) en de app op een echte iPhone.
 backend/XrmPocket.Api/           ASP.NET Core (.NET 10) — API + engine
   Program.cs                     endpoints, DI, statische bestanden
   Query/QueryService.cs          SQL → plan/FetchXML → uitvoering → JSON
-  Query/SqlSafetyCheck.cs        alleen leesqueries (ScriptDom)
+  Query/SqlSafetyCheck.cs        SELECT + INSERT/UPDATE/DELETE toegestaan, DDL geweigerd (ScriptDom)
   Query/QueryModels.cs           request/response-contracten
   Connections/ConnectionProfile.cs   model (SavedConnection, ConnectionTestResult)
   Connections/ConnectionStore.cs     verbindingen in ~/.config/xrmpocket/connections.json
@@ -117,8 +117,7 @@ app-only blijven gebruiken.
    relevante doc. Lees niet de hele repo in je context; open alleen wat je nodig hebt.
 2. **Secrets nooit** in de repo, in een commit, in een API-antwoord, in een log of in
    een chatbericht. Alleen paden noemen. Nieuwe machine = secret daar opnieuw instellen.
-3. **Alleen leesqueries.** Schrijfacties (INSERT/UPDATE/DELETE) blijven uit tot een
-   expliciete nieuwe beslissing.
+3. **Schrijven toegestaan** (INSERT/UPDATE/DELETE, beslissing `2026-11-27-schrijven-toegestaan`); DDL blijft geweigerd.
 4. **Kleine Nederlandse commits** (`backend: …`, `web: …`, `docs: …`, `afspraken: …`),
    met `git push` naar `main`. Werk nooit ongecommit achter.
 5. **Beslissing nodig?** Voeg een notitie toe aan `afspraken/decisions.yaml`
@@ -220,8 +219,8 @@ curl -s -X POST http://127.0.0.1:4108/api/query \
 
 curl -s -X POST http://127.0.0.1:4108/api/query \
   -H 'content-type: application/json' \
-  -d '{"sql":"DELETE FROM account"}'
-# ok:false, error.code = write_not_allowed
+  -d '{"sql":"DROP TABLE account"}'
+# ok:false, error.code = not_supported
 ```
 
 Verwacht op een verse machine: `connections.json` wordt **automatisch aangemaakt** met
@@ -377,7 +376,7 @@ sessietitel `Sauron - XrmPocket`, en de brug herstarten. De app zelf blijft op 4
 - [ ] `npm install && npm run build` in `web` → output in `backend/.../wwwroot`
 - [ ] backend gestart, `/api/health` = `ok`
 - [ ] mock-query via `curl` geeft rijen + FetchXML
-- [ ] schrijfquery geweigerd (`write_not_allowed`)
+- [ ] DDL-statement geweigerd (`not_supported`)
 - [ ] afspraken in §6 overgenomen (zeker: geen secrets, kleine commits, alleen lezen)
 - [ ] bij twijfel: vraag de gebruiker in plaats van te gokken
 - [ ] Windows-laptop: `dotnet --version` = 10.x, `node --version` ≥ 22, poort 4108 vrij

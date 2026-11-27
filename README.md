@@ -26,7 +26,7 @@ Carrington, die **inprocess** in de backend draait. Naamsvermelding:
   geïmplementeerd: de verbindingstest komt tot bij Microsoft, maar slagen kan pas met
   een geldig client secret en een application user in SAV-TEST
   (zie [`START.md`](START.md) §4).
-- Schrijfacties (INSERT/UPDATE/DELETE) zijn bewust uitgeschakeld.
+- Schrijfacties zijn toegestaan (INSERT/UPDATE/DELETE); DDL wordt geweigerd.
 
 ## Snel starten
 
@@ -79,7 +79,7 @@ START.md / CONTEXT.md     overdracht en projectoverzicht
 - Het client secret leeft server-side in `~/.config/opencode/secrets/` (chmod 600);
   nooit in de repo, nooit in de UI, nooit in logs. Verbindingen staan in
   `~/.config/xrmpocket/connections.json` (chmod 600) — zonder secret.
-- Alleen leesqueries; de backend weigert schrijfacties.
+- Schrijven (INSERT/UPDATE/DELETE) is toegestaan; DDL weigert de backend.
 - Geen echte klantgegevens als testmateriaal — de mock-dataset is verzonnen.
 
 Details: [`docs/architectuur.md`](docs/architectuur.md) ·

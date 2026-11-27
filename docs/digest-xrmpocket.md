@@ -17,7 +17,8 @@ de frontend is React + TypeScript + Vite (PWA).
 - **Echte Dataverse-verbinding nog niet groen**: wacht op portal-acties van de
   gebruiker (redirect-URI + gedelegeerde `user_impersonation` voor interactief, of een
   nieuw client secret + application user voor app-only).
-- Schrijfacties zijn **bewust uit** (alleen leesqueries).
+- Schrijfacties zijn toegestaan (INSERT/UPDATE/DELETE, ook op SAV-PRD) sinds beslissing
+  `2026-11-27-schrijven-toegestaan`; DDL blijft geweigerd.
 
 ## Draaien
 
@@ -55,7 +56,7 @@ curl -s -X POST http://127.0.0.1:4108/api/query -H 'content-type: application/js
 ## Harde regels
 
 1. **Geen secrets** in repo, commits, logs, API-antwoorden of chat. Alleen paden.
-2. **Alleen leesqueries**; schrijven pas na een nieuwe beslissing.
+2. **Schrijfacties** (INSERT/UPDATE/DELETE) mag, zie beslissing `2026-11-27-schrijven-toegestaan`. DDL blijft geweigerd.
 3. **Poort 4108** voor de app; 4101-4107 nooit aanraken (Sauron/openCode).
 4. **Kleine Nederlandse commits** + `git push`; nooit ongecommit achterblijven.
 5. **Beslissing = `afspraken/decisions.yaml` + `CONTEXT.md` + deze digest** in één commit.
